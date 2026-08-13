@@ -1,0 +1,10 @@
+{
+  "invariantId": "one-capture-per-business-operation",
+  "classification": "EXTERNAL_EFFECT_REGRESSION",
+  "observationId": "capture-effects",
+  "rowKey": "business_key=order-1",
+  "pointer": "/entries/count",
+  "expected": 1,
+  "actual": 2,
+  "digest": "34904ab76052369ba67bbc30ae12855b0665c884c24b92ec31c081388176fc17"
+}

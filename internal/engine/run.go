@@ -19,12 +19,14 @@ import (
 	"github.com/uday1o1/chronicle-gate/internal/broker"
 	"github.com/uday1o1/chronicle-gate/internal/bundle"
 	"github.com/uday1o1/chronicle-gate/internal/database"
+	"github.com/uday1o1/chronicle-gate/internal/effects"
 	"github.com/uday1o1/chronicle-gate/internal/imagelock"
 	"github.com/uday1o1/chronicle-gate/internal/minimize"
 	creport "github.com/uday1o1/chronicle-gate/internal/report"
 	"github.com/uday1o1/chronicle-gate/internal/runlog"
 	cruntime "github.com/uday1o1/chronicle-gate/internal/runtime"
 	"github.com/uday1o1/chronicle-gate/internal/spec"
+	"github.com/uday1o1/chronicle-gate/pkg/probe"
 )
 
 var databaseURLPattern = regexp.MustCompile(`(?i)postgres(?:ql)?://[^\s]+`)
@@ -90,24 +92,42 @@ type EnvironmentEvidence struct {
 }
 
 type AttemptEvidence struct {
-	AttemptID              string                  `json:"attemptId"`
-	Role                   string                  `json:"role"`
-	Status                 string                  `json:"status"`
-	Database               string                  `json:"database"`
-	Topic                  string                  `json:"topic"`
-	Group                  string                  `json:"group"`
-	AuthoredImage          string                  `json:"authoredImage"`
-	ExecutedImageID        string                  `json:"executedImageId,omitempty"`
-	Published              broker.RecordIdentity   `json:"published"`
-	Publications           []broker.RecordIdentity `json:"publications"`
-	Deliveries             []database.Delivery     `json:"deliveries"`
-	Rewind                 broker.RewindEvidence   `json:"rewind"`
-	SchemaAfterHealth      string                  `json:"schemaAfterHealth,omitempty"`
-	SchemaAfterObservation string                  `json:"schemaAfterObservation,omitempty"`
-	ObservationRows        []map[string]any        `json:"observationRows"`
-	InvariantRows          []map[string]any        `json:"invariantRows"`
-	Signature              *FailureSignature       `json:"signature,omitempty"`
-	Error                  string                  `json:"error,omitempty"`
+	AttemptID              string                        `json:"attemptId"`
+	Role                   string                        `json:"role"`
+	Status                 string                        `json:"status"`
+	Database               string                        `json:"database"`
+	Topic                  string                        `json:"topic"`
+	Group                  string                        `json:"group"`
+	AuthoredImage          string                        `json:"authoredImage"`
+	ExecutedImageID        string                        `json:"executedImageId,omitempty"`
+	Published              broker.RecordIdentity         `json:"published"`
+	Publications           []broker.RecordIdentity       `json:"publications"`
+	Deliveries             []database.Delivery           `json:"deliveries"`
+	Rewind                 broker.RewindEvidence         `json:"rewind"`
+	GroupInitialization    broker.InitializationEvidence `json:"groupInitialization,omitempty"`
+	ProbeCapabilities      []probe.Capabilities          `json:"probeCapabilities,omitempty"`
+	ProbeDeliveries        []probe.DeliveryReceipt       `json:"probeDeliveries,omitempty"`
+	CheckpointMode         string                        `json:"checkpointMode,omitempty"`
+	CommittedWhileBlocked  *int64                        `json:"committedWhileBlocked,omitempty"`
+	FinalCommitted         *int64                        `json:"finalCommitted,omitempty"`
+	Effects                *effects.Observation          `json:"effects,omitempty"`
+	Quiescence             *QuiescenceEvidence           `json:"quiescence,omitempty"`
+	SchemaAfterHealth      string                        `json:"schemaAfterHealth,omitempty"`
+	SchemaAfterObservation string                        `json:"schemaAfterObservation,omitempty"`
+	ObservationRows        []map[string]any              `json:"observationRows"`
+	InvariantRows          []map[string]any              `json:"invariantRows"`
+	Signature              *FailureSignature             `json:"signature,omitempty"`
+	Error                  string                        `json:"error,omitempty"`
+}
+
+type QuiescenceEvidence struct {
+	StableForMilliseconds int64                 `json:"stableForMilliseconds"`
+	Samples               int                   `json:"samples"`
+	Conditions            map[string]bool       `json:"conditions"`
+	Probe                 probe.QuiescenceState `json:"probe"`
+	EffectPending         int                   `json:"effectPending"`
+	ProcessedEvents       int64                 `json:"processedEvents"`
+	CommittedOffset       int64                 `json:"committedOffset"`
 }
 
 type FailureSignature struct {
@@ -150,6 +170,10 @@ func (failure *infrastructureFailure) Unwrap() error {
 }
 
 func ValidateVerticalSlice(scenario spec.Scenario, target spec.Target) error {
+	if isPreciseScenario(scenario) {
+		_, err := buildPrecisePlan(scenario, target)
+		return err
+	}
 	_, err := buildVerticalPlan(scenario, target)
 	return err
 }
@@ -221,16 +245,15 @@ func buildVerticalPlan(scenario spec.Scenario, target spec.Target) (verticalPlan
 func Run(ctx context.Context, config Config) (report Report) {
 	started := time.Now().UTC()
 	report = Report{
-		APIVersion:     spec.APIVersion,
-		Kind:           "Result",
-		RunID:          newRunID(),
-		State:          "VALIDATING",
-		Classification: "UNRESOLVED",
-		StartedAt:      started.Format(time.RFC3339Nano),
-		NonportableImages: imagelock.IsLocalImageID(config.Baseline.Spec.Services[0].Image) ||
-			imagelock.IsLocalImageID(config.Candidate.Spec.Services[0].Image),
-		Candidate:  []AttemptEvidence{},
-		Violations: []Violation{},
+		APIVersion:        spec.APIVersion,
+		Kind:              "Result",
+		RunID:             newRunID(),
+		State:             "VALIDATING",
+		Classification:    "UNRESOLVED",
+		StartedAt:         started.Format(time.RFC3339Nano),
+		NonportableImages: config.Nonportable(),
+		Candidate:         []AttemptEvidence{},
+		Violations:        []Violation{},
 		Minimization: minimize.Summary{
 			Status: "skipped", Minimality: "unavailable", AcceptedTransforms: []string{}, Rejections: []minimize.Rejection{},
 		},
@@ -265,7 +288,14 @@ func Run(ctx context.Context, config Config) (report Report) {
 		finalizeRun(config.Output, &report, journal, nil)
 		return report
 	}
-	plan, err := buildVerticalPlan(config.Scenario, config.Baseline)
+	precise := isPreciseScenario(config.Scenario)
+	var plan verticalPlan
+	var baselinePrecisePlan precisePlan
+	if precise {
+		baselinePrecisePlan, err = buildPrecisePlan(config.Scenario, config.Baseline)
+	} else {
+		plan, err = buildVerticalPlan(config.Scenario, config.Baseline)
+	}
 	if err != nil {
 		report.fail("UNRESOLVED", err)
 		finalizeRun(config.Output, &report, journal, nil)
@@ -320,13 +350,27 @@ func Run(ctx context.Context, config Config) (report Report) {
 	}
 	if err == nil {
 		var baseline AttemptEvidence
-		baseline, err = executeAttempt(runContext, attemptConfig{
-			RunID: report.RunID, Index: 0, Role: "baseline", ScenarioRoot: config.ScenarioRoot, Output: config.Output,
-			Plan: plan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
-		})
+		if precise {
+			baseline, err = executePreciseAttempt(runContext, preciseAttemptConfig{
+				RunID: report.RunID, Index: 0, Role: "baseline", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+				Plan: baselinePrecisePlan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
+			})
+		} else {
+			baseline, err = executeAttempt(runContext, attemptConfig{
+				RunID: report.RunID, Index: 0, Role: "baseline", ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+				Plan: plan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
+			})
+		}
 		report.Baseline = &baseline
 		if err == nil && len(baseline.InvariantRows) != 0 {
-			report.fail("UNRESOLVED", fmt.Errorf("baseline violated invariant %q", plan.invariant.ID))
+			invariantID := plan.invariant.ID
+			if precise {
+				invariantID = baselinePrecisePlan.invariant.ID
+			}
+			report.fail("UNRESOLVED", fmt.Errorf("baseline violated invariant %q", invariantID))
+			err = errors.New(report.Error)
+		} else if err == nil && baseline.Signature != nil {
+			report.fail("UNRESOLVED", errors.New("baseline violated the external-effect contract"))
 			err = errors.New(report.Error)
 		}
 	}
@@ -338,16 +382,32 @@ func Run(ctx context.Context, config Config) (report Report) {
 		err = transition(journal, &report, "CANDIDATE_STARTING")
 	}
 	if err == nil {
-		candidatePlan, planErr := buildVerticalPlan(config.Scenario, config.Candidate)
+		var candidatePlan verticalPlan
+		var candidatePrecisePlan precisePlan
+		var planErr error
+		if precise {
+			candidatePrecisePlan, planErr = buildPrecisePlan(config.Scenario, config.Candidate)
+		} else {
+			candidatePlan, planErr = buildVerticalPlan(config.Scenario, config.Candidate)
+		}
 		if planErr != nil {
 			err = planErr
 		} else {
 			attempts := 1 + config.Scenario.Spec.Limits.ConfirmationAttempts
 			for index := 0; index < attempts && err == nil; index++ {
-				attempt, attemptErr := executeAttempt(runContext, attemptConfig{
-					RunID: report.RunID, Index: index, Role: "candidate", ScenarioRoot: config.ScenarioRoot, Output: config.Output,
-					Plan: candidatePlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
-				})
+				var attempt AttemptEvidence
+				var attemptErr error
+				if precise {
+					attempt, attemptErr = executePreciseAttempt(runContext, preciseAttemptConfig{
+						RunID: report.RunID, Index: index, Role: "candidate", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+						Plan: candidatePrecisePlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
+					})
+				} else {
+					attempt, attemptErr = executeAttempt(runContext, attemptConfig{
+						RunID: report.RunID, Index: index, Role: "candidate", ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+						Plan: candidatePlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
+					})
+				}
 				report.Candidate = append(report.Candidate, attempt)
 				err = attemptErr
 			}
@@ -372,7 +432,7 @@ func Run(ctx context.Context, config Config) (report Report) {
 	if err != nil && report.Error == "" {
 		report.fail(classifyOperationalError(err), err)
 	}
-	if err == nil && report.Classification == "SEMANTIC_REGRESSION" && !config.NoMinimize {
+	if err == nil && report.Classification == "SEMANTIC_REGRESSION" && !config.NoMinimize && !precise {
 		if transitionErr := transition(journal, &report, "MINIMIZING"); transitionErr != nil {
 			report.fail("INFRASTRUCTURE_ERROR", transitionErr)
 		} else {
@@ -406,7 +466,7 @@ func Run(ctx context.Context, config Config) (report Report) {
 	if interrupted && cleanupErr == nil {
 		report.State = "INTERRUPTED"
 	}
-	if report.Classification == "SEMANTIC_REGRESSION" && report.FailureSignature != nil {
+	if strings.HasSuffix(report.Classification, "_REGRESSION") && report.FailureSignature != nil {
 		if config.ExpectedSignature != "" && config.ExpectedSignature != report.FailureSignature.Digest {
 			report.fail("UNRESOLVED", fmt.Errorf("replay signature mismatch: got %s want %s", report.FailureSignature.Digest, config.ExpectedSignature))
 		} else {
@@ -737,7 +797,11 @@ func classifyCandidate(attempts []AttemptEvidence) (string, *FailureSignature) {
 			return "FLAKY", nil
 		}
 	}
-	return "SEMANTIC_REGRESSION", first
+	classification := first.Classification
+	if classification == "" {
+		classification = "SEMANTIC_REGRESSION"
+	}
+	return classification, first
 }
 
 func classifyOperationalError(err error) string {
@@ -1102,7 +1166,14 @@ func proposalPredicate(ctx context.Context, config Config, runID string, origina
 }
 
 func (config Config) Nonportable() bool {
-	return imagelock.IsLocalImageID(config.Baseline.Spec.Services[0].Image) || imagelock.IsLocalImageID(config.Candidate.Spec.Services[0].Image)
+	for _, target := range []spec.Target{config.Baseline, config.Candidate} {
+		for _, service := range target.Spec.Services {
+			if imagelock.IsLocalImageID(service.Image) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (report *Report) fail(classification string, err error) {

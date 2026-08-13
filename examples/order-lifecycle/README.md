@@ -1,6 +1,6 @@
-# Order lifecycle R1 vertical slice
+# Order lifecycle R1 and R2 vertical slices
 
-This example qualifies a single inventory projection invariant against a correct baseline and a candidate with a seeded missing-idempotency guard.
+This example qualifies an inventory projection invariant and a precise external-effect crash invariant against correct baselines and seeded candidates.
 
 ## What the run proves
 
@@ -29,11 +29,36 @@ Attempt evidence is atomically finalized before its topic is deleted.
 The top-level result is atomically finalized after cleanup, so a cleanup failure overrides a semantic conclusion with `INFRASTRUCTURE_ERROR`.
 The integration suite queries Docker after both a successful run and an injected missing-image failure and requires zero matching containers and networks.
 
+## Precise R2 crash window
+
+`r2-crash-after-effect.yaml` initializes offset `0` for a fresh empty group before the consumer starts.
+The workflow proves the `chronicle-probe/v1alpha1` capability handshake, including manual synchronous commits, one controlled in-flight record, named checkpoints, and deterministic logical time.
+The harness arms the exact first `after_external_effect` occurrence before publication and waits until both the checkpoint and the first canonical sink entry are visible.
+It verifies that the committed position is still `0`, checks that the group contains exactly the expected member, sends `SIGKILL`, and waits for group membership to become empty.
+After restart, a new probe process instance must report the same orchestrator-owned logical time and a different process identifier.
+The second probe receipt must identify the same topic, partition, offset, key, event ID, and event digest as the first receipt.
+
+The baseline sink observation contains one stable effect entry.
+The seeded R2 candidate contains two entries with different idempotency keys for one business key.
+The exact count-based failure signature remains stable even though the defective random keys differ between confirmation attempts.
+All effect entries retain amount and source broker metadata, and the observer verifies the canonical ledger digest before comparison.
+
+`manual-offset-commit-control.yaml` arms both `before_offset_commit` and `after_offset_commit`.
+It proves the group position remains `0` at the first gate, releases processing, and proves the position is `1` before the second gate becomes visible.
+Completion additionally requires lag zero, no in-flight work, no armed or blocked checkpoints, an empty outbox, no pending sink calls, and the terminal database state for a continuous two-second stability window.
+
+## Isolation and security
+
+The workflow and effect sink run as a numeric non-root identity with a read-only root filesystem, all Linux capabilities dropped, `no-new-privileges`, CPU, memory, and PID limits, and loopback-only host mappings.
+Each service receives one private read-only directory containing only its required `0600` token files.
+The sink writer credential cannot observe the ledger, and the observer credential cannot append effects.
+Neither service receives the Docker socket.
+
 ## Current boundaries
 
 The generated local image IDs are content-addressed but not registry-resolvable or cross-platform portable.
 They are accepted only with `--development-local-images`.
-Milestone 4 will add the authenticated probe and precise crash checkpoints.
+Milestone 5 will complete the broader observer and schema-default corpus beyond the portfolio-ready core.
 
 ## Stable reduction and replay
 

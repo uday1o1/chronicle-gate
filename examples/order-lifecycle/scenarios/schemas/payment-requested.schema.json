@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/examples/payment-requested.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["orderId", "amount"],
+  "properties": {
+    "orderId": {"type": "string", "minLength": 1},
+    "amount": {"type": "integer", "minimum": 1}
+  }
+}

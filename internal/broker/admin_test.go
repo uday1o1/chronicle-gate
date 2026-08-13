@@ -25,3 +25,15 @@ func TestValidateRewindBounds(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateEmptyGroupInitialization(t *testing.T) {
+	t.Parallel()
+	if err := ValidateEmptyGroupInitialization(0, 0); err != nil {
+		t.Fatalf("empty topic rejected: %v", err)
+	}
+	for _, bounds := range [][2]int64{{0, 1}, {1, 1}, {-1, 0}} {
+		if err := ValidateEmptyGroupInitialization(bounds[0], bounds[1]); err == nil {
+			t.Fatalf("nonempty or invalid bounds %v accepted", bounds)
+		}
+	}
+}

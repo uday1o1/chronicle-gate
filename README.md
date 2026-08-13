@@ -3,9 +3,8 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestones 0 through 3 are complete.
-Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, and verified replay bundles pass their local acceptance gates.
-Precise crash-window claims remain unavailable until the probe milestone passes.
+Milestones 0 through 4 are complete, including the portfolio-ready core checkpoint.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, and manual synchronous offset-commit proof pass their local acceptance gates.
 
 ## Bootstrap
 
@@ -48,7 +47,7 @@ All checked-in scenario, target, workload, result, and bundle examples pass both
 
 The R1 walkthrough requires Docker with at least 4 CPUs, 6 GiB of memory, and the locked Redpanda and PostgreSQL images available for the local architecture.
 The reference image build is a repository-trusted development workflow and runs before `chronicle run`.
-It creates two distinct local content-addressed Docker images and generates ignored target manifests containing their exact image IDs.
+It creates distinct correct and seeded-defect images for R1 and R2, creates the local effect sink, and generates ignored target manifests containing exact image IDs.
 
 ```sh
 make reference-images
@@ -99,6 +98,43 @@ Run the repeatable success and injected-failure cleanup gate with:
 ```sh
 make test-integration
 ```
+
+## Run the precise R2 crash qualification
+
+R2 uses the opt-in public [`pkg/probe`](pkg/probe) package to block the workflow at the exact `after_external_effect` checkpoint.
+The harness proves the group offset remains `0`, verifies the first delivery's topic, partition, offset, key, and event digest, sends `SIGKILL`, waits for the group to become empty, restarts the same declared image and group, and verifies the same physical record is delivered again.
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r2-crash-after-effect.yaml \
+  --baseline examples/order-lifecycle/targets/generated/r2-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/r2-candidate.yaml \
+  --out run/r2 \
+  --development-local-images \
+  --json
+```
+
+Exit code `2` is expected.
+The correct baseline uses the CloudEvent ID as its effect idempotency key and records one effect across the crash.
+The seeded candidate creates a new key for each delivery and produces the stable checked-in `EXTERNAL_EFFECT_REGRESSION` signature with two effects for one business operation.
+Every completed attempt proves the full declared quiescence contract continuously for two seconds.
+
+The nearby manual-commit control must pass with exit code `0`:
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/manual-offset-commit-control.yaml \
+  --baseline examples/order-lifecycle/targets/generated/r2-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/r2-baseline.yaml \
+  --out run/manual-commit \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+The control blocks at `before_offset_commit` while the committed position remains `0`.
+After release, the service performs a synchronous record commit and independently reads the group offset until it is exactly `1` before exposing `after_offset_commit`.
+See [`docs/portfolio-core.md`](docs/portfolio-core.md) for the measured checkpoint evidence and clean-source reproduction procedure.
 
 ## License
 

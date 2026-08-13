@@ -28,6 +28,13 @@ type RewindEvidence struct {
 	FinalCommitted int64 `json:"finalCommitted"`
 }
 
+// InitializationEvidence proves a fresh empty group was positioned before a consumer joined.
+type InitializationEvidence struct {
+	LogStart  int64 `json:"logStart"`
+	LogEnd    int64 `json:"logEnd"`
+	Committed int64 `json:"committed"`
+}
+
 // Admin owns host-side Kafka clients for one run.
 type Admin struct {
 	client *kgo.Client
@@ -138,6 +145,46 @@ func (admin *Admin) WaitGroupEmpty(ctx context.Context, group string) error {
 	}
 }
 
+// InitializeEmptyGroupAtZero initializes a fresh group only for an empty topic.
+// This is deliberately separate from rewind, whose valid interval is [start,end).
+func (admin *Admin) InitializeEmptyGroupAtZero(ctx context.Context, group, topic string, partition int32) (InitializationEvidence, error) {
+	described, err := admin.kadm.DescribeGroups(ctx, group)
+	if err != nil {
+		return InitializationEvidence{}, fmt.Errorf("describe group before initialization: %w", err)
+	}
+	if description, exists := described[group]; exists && len(description.Members) != 0 {
+		return InitializationEvidence{}, fmt.Errorf("refuse group initialization while group %q has %d members", group, len(description.Members))
+	}
+	starts, err := admin.kadm.ListStartOffsets(ctx, topic)
+	if err != nil {
+		return InitializationEvidence{}, fmt.Errorf("list start offsets before group initialization: %w", err)
+	}
+	ends, err := admin.kadm.ListEndOffsets(ctx, topic)
+	if err != nil {
+		return InitializationEvidence{}, fmt.Errorf("list end offsets before group initialization: %w", err)
+	}
+	start, startExists := starts.Lookup(topic, partition)
+	end, endExists := ends.Lookup(topic, partition)
+	if !startExists || !endExists || start.Err != nil || end.Err != nil {
+		return InitializationEvidence{}, fmt.Errorf("offset bounds for %s[%d] are unavailable", topic, partition)
+	}
+	if err := ValidateEmptyGroupInitialization(start.Offset, end.Offset); err != nil {
+		return InitializationEvidence{}, err
+	}
+	offsets := kadm.Offsets{topic: {partition: {Topic: topic, Partition: partition, At: 0, LeaderEpoch: -1}}}
+	if err := admin.kadm.CommitAllOffsets(ctx, group, offsets); err != nil {
+		return InitializationEvidence{}, fmt.Errorf("commit initial group offset: %w", err)
+	}
+	committed, err := admin.CommittedOffset(ctx, group, topic, partition)
+	if err != nil {
+		return InitializationEvidence{}, fmt.Errorf("verify initial group offset: %w", err)
+	}
+	if committed != 0 {
+		return InitializationEvidence{}, fmt.Errorf("initial group offset is %d, want 0", committed)
+	}
+	return InitializationEvidence{LogStart: start.Offset, LogEnd: end.Offset, Committed: committed}, nil
+}
+
 func (admin *Admin) Rewind(ctx context.Context, group, topic string, partition int32, requested int64) (RewindEvidence, error) {
 	described, err := admin.kadm.DescribeGroups(ctx, group)
 	if err != nil {
@@ -186,6 +233,13 @@ func ValidateRewindBounds(requested, start, end int64) error {
 	}
 	if requested < start || requested >= end {
 		return fmt.Errorf("requested rewind offset %d is outside broker bounds [%d,%d)", requested, start, end)
+	}
+	return nil
+}
+
+func ValidateEmptyGroupInitialization(start, end int64) error {
+	if start != 0 || end != 0 {
+		return fmt.Errorf("fresh group initialization requires an empty topic at [0,0), got [%d,%d)", start, end)
 	}
 	return nil
 }

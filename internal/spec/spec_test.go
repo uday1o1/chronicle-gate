@@ -263,6 +263,35 @@ func TestCheckpointCrashRestartSequenceIsLegal(t *testing.T) {
 	}
 }
 
+func TestPreciseR2AndManualCommitExamplesValidate(t *testing.T) {
+	t.Parallel()
+	root := repositoryPath("examples", "order-lifecycle", "scenarios")
+	baseline, err := LoadTarget(repositoryPath("examples", "order-lifecycle", "targets", "r2-baseline.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := LoadTarget(repositoryPath("examples", "order-lifecycle", "targets", "r2-candidate.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"r2-crash-after-effect.yaml", "manual-offset-commit-control.yaml"} {
+		scenario, err := LoadScenario(filepath.Join(root, name))
+		if err != nil {
+			t.Fatalf("load %s: %v", name, err)
+		}
+		if violations := ValidateScenarioAndTarget(scenario, baseline, root); len(violations) != 0 {
+			t.Fatalf("%s violations = %#v", name, violations)
+		}
+	}
+	r2, err := LoadScenario(filepath.Join(root, "r2-crash-after-effect.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if violations := CompareTargets(baseline, candidate, r2.Spec.Comparison.AllowedTargetDifferences); len(violations) != 0 {
+		t.Fatalf("R2 target comparison violations = %#v", violations)
+	}
+}
+
 func TestCheckpointPublishOrderIsRequired(t *testing.T) {
 	t.Parallel()
 

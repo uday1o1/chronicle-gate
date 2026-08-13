@@ -1,0 +1,105 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: crash-after-effect-uses-stable-idempotency
+  description: A crash after a payment capture must not duplicate the business effect.
+spec:
+  seed: {}
+  clock:
+    start: "2026-08-13T00:00:00Z"
+  events:
+    payment-requested:
+      specversion: "1.0"
+      id: payment-requested-1
+      source: /orders/order-1
+      type: dev.chronicle.payment.requested
+      subject: order-1
+      time: "2026-08-13T00:00:01Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 1
+      dataschema: schemas/payment-requested.schema.json
+      data:
+        orderId: order-1
+        amount: 1250
+  steps:
+    - id: arm-after-effect
+      armCheckpoint:
+        service: order-workflow
+        name: after_external_effect
+        eventId: payment-requested-1
+        stepId: publish-payment
+        occurrence: 1
+    - id: publish-payment
+      dependsOn: [arm-after-effect]
+      publish:
+        event: payment-requested
+        topic: payments
+        partition: 0
+        key: order-1
+    - id: await-after-effect
+      dependsOn: [publish-payment]
+      timeout: 20s
+      await:
+        checkpoint:
+          service: order-workflow
+          name: after_external_effect
+          eventId: payment-requested-1
+          stepId: publish-payment
+          occurrence: 1
+    - id: kill-workflow
+      dependsOn: [await-after-effect]
+      stop:
+        service: order-workflow
+    - id: restart-workflow
+      dependsOn: [kill-workflow]
+      restart:
+        service: order-workflow
+    - id: observe-effects
+      dependsOn: [restart-workflow]
+      timeout: 30s
+      observe:
+        observation: capture-effects
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 2s
+    conditions:
+      - id: workflow-lag
+        type: groupLagZero
+        group: order-workflow
+      - id: workflow-idle
+        type: probeIdle
+        service: order-workflow
+      - id: checkpoints-clear
+        type: checkpointsClear
+        service: order-workflow
+      - id: outbox-empty
+        type: outboxEmpty
+        service: order-workflow
+      - id: effects-idle
+        type: effectsIdle
+        service: effect-sink
+      - id: payment-processed
+        type: terminalState
+        service: order-workflow
+        state: processed
+  observations:
+    - id: capture-effects
+      effects:
+        url: http://127.0.0.1/effects
+  invariants:
+    - id: one-capture-per-business-operation
+      queryFile: queries/duplicate-processed-events.sql
+      classification: EXTERNAL_EFFECT_REGRESSION
+  normalization: []
+  limits:
+    maxSteps: 100
+    maxEvents: 100
+    maxRunDuration: 5m
+    confirmationAttempts: 2
+    minimizationTrials: 100
+    minimizationDuration: 10m
+  comparison:
+    allowedTargetDifferences:
+      - pointer: /spec/services/order-workflow/image
+        rationale: Exercise the seeded unstable effect idempotency implementation.

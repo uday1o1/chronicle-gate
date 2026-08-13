@@ -148,6 +148,23 @@ record_key text NOT NULL,
 commit_confirmed boolean NOT NULL DEFAULT false,
 delivered_at timestamptz NOT NULL DEFAULT clock_timestamp()
 )`,
+		`CREATE TABLE processed_events (
+event_id text PRIMARY KEY,
+aggregate_id text NOT NULL,
+processed_at timestamptz NOT NULL DEFAULT clock_timestamp()
+)`,
+		`CREATE TABLE external_effects (
+id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+event_id text NOT NULL,
+business_key text NOT NULL,
+idempotency_key text NOT NULL UNIQUE,
+recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
+)`,
+		`CREATE TABLE outbox (
+id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+event_id text NOT NULL,
+published_at timestamptz
+)`,
 		"RESET ROLE",
 		"REVOKE ALL ON SCHEMA public FROM PUBLIC",
 		"GRANT CONNECT ON DATABASE " + templateDatabase + " TO " + serviceRole + ", " + observerRole,
@@ -346,6 +363,32 @@ func Query(ctx context.Context, dsn, query string) ([]map[string]any, error) {
 		return nil, fmt.Errorf("commit read-only observation: %w", err)
 	}
 	return result, nil
+}
+
+func CountProcessedEvent(ctx context.Context, dsn, eventID string) (int64, error) {
+	connection, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return 0, fmt.Errorf("connect processed-event observer: %w", err)
+	}
+	defer func() { _ = connection.Close(context.Background()) }()
+	var count int64
+	if err := connection.QueryRow(ctx, "SELECT count(*) FROM processed_events WHERE event_id = $1", eventID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count processed event: %w", err)
+	}
+	return count, nil
+}
+
+func CountUnpublishedOutbox(ctx context.Context, dsn string) (int64, error) {
+	connection, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return 0, fmt.Errorf("connect outbox observer: %w", err)
+	}
+	defer func() { _ = connection.Close(context.Background()) }()
+	var count int64
+	if err := connection.QueryRow(ctx, "SELECT count(*) FROM outbox WHERE published_at IS NULL").Scan(&count); err != nil {
+		return 0, fmt.Errorf("count unpublished outbox rows: %w", err)
+	}
+	return count, nil
 }
 
 func AssertObserverReadOnly(ctx context.Context, dsn string) error {

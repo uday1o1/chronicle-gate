@@ -1,0 +1,126 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: manual-offset-commit-control
+  description: The group position advances only after release from before_offset_commit and independent verification.
+spec:
+  seed: {}
+  clock:
+    start: "2026-08-13T00:00:00Z"
+  events:
+    payment-requested:
+      specversion: "1.0"
+      id: payment-requested-control-1
+      source: /orders/order-control-1
+      type: dev.chronicle.payment.requested
+      subject: order-control-1
+      time: "2026-08-13T00:00:01Z"
+      datacontenttype: application/json
+      aggregateid: order-control-1
+      aggregateversion: 1
+      dataschema: schemas/payment-requested.schema.json
+      data:
+        orderId: order-control-1
+        amount: 1250
+  steps:
+    - id: arm-before-commit
+      armCheckpoint:
+        service: order-workflow
+        name: before_offset_commit
+        eventId: payment-requested-control-1
+        stepId: publish-payment
+        occurrence: 1
+    - id: arm-after-commit
+      armCheckpoint:
+        service: order-workflow
+        name: after_offset_commit
+        eventId: payment-requested-control-1
+        stepId: publish-payment
+        occurrence: 1
+    - id: publish-payment
+      dependsOn: [arm-before-commit, arm-after-commit]
+      publish:
+        event: payment-requested
+        topic: payments
+        partition: 0
+        key: order-control-1
+    - id: await-before-commit
+      dependsOn: [publish-payment]
+      timeout: 20s
+      await:
+        checkpoint:
+          service: order-workflow
+          name: before_offset_commit
+          eventId: payment-requested-control-1
+          stepId: publish-payment
+          occurrence: 1
+    - id: release-before-commit
+      dependsOn: [await-before-commit]
+      releaseCheckpoint:
+        service: order-workflow
+        name: before_offset_commit
+        eventId: payment-requested-control-1
+        stepId: publish-payment
+        occurrence: 1
+    - id: await-after-commit
+      dependsOn: [release-before-commit]
+      timeout: 20s
+      await:
+        checkpoint:
+          service: order-workflow
+          name: after_offset_commit
+          eventId: payment-requested-control-1
+          stepId: publish-payment
+          occurrence: 1
+    - id: release-after-commit
+      dependsOn: [await-after-commit]
+      releaseCheckpoint:
+        service: order-workflow
+        name: after_offset_commit
+        eventId: payment-requested-control-1
+        stepId: publish-payment
+        occurrence: 1
+    - id: observe-effects
+      dependsOn: [release-after-commit]
+      timeout: 30s
+      observe:
+        observation: capture-effects
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 2s
+    conditions:
+      - id: workflow-lag
+        type: groupLagZero
+        group: order-workflow
+      - id: workflow-idle
+        type: probeIdle
+        service: order-workflow
+      - id: checkpoints-clear
+        type: checkpointsClear
+        service: order-workflow
+      - id: outbox-empty
+        type: outboxEmpty
+        service: order-workflow
+      - id: effects-idle
+        type: effectsIdle
+        service: effect-sink
+      - id: payment-processed
+        type: terminalState
+        service: order-workflow
+        state: processed
+  observations:
+    - id: capture-effects
+      effects:
+        url: http://127.0.0.1/effects
+  invariants:
+    - id: one-capture-per-business-operation
+      queryFile: queries/duplicate-processed-events.sql
+      classification: EXTERNAL_EFFECT_REGRESSION
+  normalization: []
+  limits:
+    maxSteps: 100
+    maxEvents: 100
+    maxRunDuration: 5m
+    confirmationAttempts: 2
+    minimizationTrials: 100
+    minimizationDuration: 10m

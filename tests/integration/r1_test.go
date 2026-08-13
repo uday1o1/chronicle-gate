@@ -148,6 +148,140 @@ func TestNoisyR1MinimizesAndBundleReplays(t *testing.T) {
 	assertResultContract(t, replayOutput)
 }
 
+func TestR2PublicCLIAndOfflineBundleReplay(t *testing.T) {
+	repository, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.MkdirTemp(filepath.Join(repository, "run"), "integration-r2-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	baselinePath := filepath.Join(repository, "examples/order-lifecycle/targets/generated/r2-baseline.yaml")
+	candidatePath := filepath.Join(repository, "examples/order-lifecycle/targets/generated/r2-candidate.yaml")
+	output := filepath.Join(root, "original")
+	report, stdout, stderr, exitCode := runCLIWithScenario(t, repository, output,
+		filepath.Join(repository, "examples/order-lifecycle/scenarios/r2-crash-after-effect.yaml"), baselinePath, candidatePath, false,
+	)
+	if exitCode != 2 || report.Classification != "EXTERNAL_EFFECT_REGRESSION" || report.FailureSignature == nil {
+		t.Fatalf("R2 exit=%d report=%#v\nstdout=%s\nstderr=%s", exitCode, report, stdout, stderr)
+	}
+	expectedDocument, err := os.ReadFile(filepath.Join(repository, "examples/order-lifecycle/expected/r2-signature.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var expected engine.FailureSignature
+	if err := json.Unmarshal(expectedDocument, &expected); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(*report.FailureSignature, expected) || report.Confirmations != 2 {
+		t.Fatalf("R2 signature or confirmations changed: signature=%#v confirmations=%d", report.FailureSignature, report.Confirmations)
+	}
+	if report.Baseline == nil || report.Baseline.Effects == nil || len(report.Baseline.Effects.Entries) != 1 {
+		t.Fatalf("R2 baseline effect evidence is incomplete: %#v", report.Baseline)
+	}
+	for _, attempt := range append([]engine.AttemptEvidence{*report.Baseline}, report.Candidate...) {
+		assertPreciseAttempt(t, attempt, 2)
+	}
+	for _, attempt := range report.Candidate {
+		if attempt.Effects == nil || len(attempt.Effects.Entries) != 2 || attempt.Signature == nil || attempt.Signature.Digest != expected.Digest {
+			t.Fatalf("R2 candidate evidence is incomplete: %#v", attempt)
+		}
+	}
+	bundlePath := filepath.Join(output, "reproduction.zip")
+	archive, err := bundle.Open(bundlePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleHash := archive.SHA256
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	removeTargetImages(t, baselinePath, candidatePath)
+	replayOutput := filepath.Join(root, "replay")
+	replayed, replayStdout, replayStderr, replayExit := replayCLI(t, repository, bundlePath, replayOutput)
+	if replayExit != 2 || replayed.Classification != "EXTERNAL_EFFECT_REGRESSION" || replayed.FailureSignature == nil || replayed.FailureSignature.Digest != expected.Digest {
+		t.Fatalf("R2 replay exit=%d report=%#v\nstdout=%s\nstderr=%s", replayExit, replayed, replayStdout, replayStderr)
+	}
+	if replayed.Replay == nil || replayed.Replay.SourceBundleSHA256 != bundleHash || replayed.Replay.ExpectedSignature != expected.Digest {
+		t.Fatalf("R2 replay provenance is incomplete: %#v", replayed.Replay)
+	}
+	assertNoRunResources(t, report.RunID)
+	assertNoRunResources(t, replayed.RunID)
+	assertPrivateArtifacts(t, output)
+	assertPrivateArtifacts(t, replayOutput)
+	assertAuthoritativeJournal(t, output, "COMPLETE")
+	assertAuthoritativeJournal(t, replayOutput, "COMPLETE")
+	assertResultContract(t, output)
+	assertResultContract(t, replayOutput)
+}
+
+func TestManualSynchronousCommitControl(t *testing.T) {
+	repository, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.MkdirTemp(filepath.Join(repository, "run"), "integration-manual-commit-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	baseline := filepath.Join(repository, "examples/order-lifecycle/targets/generated/r2-baseline.yaml")
+	report, stdout, stderr, exitCode := runCLIWithScenario(t, repository, filepath.Join(root, "artifacts"),
+		filepath.Join(repository, "examples/order-lifecycle/scenarios/manual-offset-commit-control.yaml"), baseline, baseline, true,
+	)
+	if exitCode != 0 || report.Classification != "PASS" {
+		t.Fatalf("manual commit exit=%d report=%#v\nstdout=%s\nstderr=%s", exitCode, report, stdout, stderr)
+	}
+	for _, attempt := range append([]engine.AttemptEvidence{*report.Baseline}, report.Candidate...) {
+		assertPreciseAttempt(t, attempt, 1)
+		if attempt.CheckpointMode != "manual-commit-control" || attempt.CommittedWhileBlocked == nil || *attempt.CommittedWhileBlocked != 0 || attempt.FinalCommitted == nil || *attempt.FinalCommitted != 1 {
+			t.Fatalf("manual commit offset proof is incomplete: %#v", attempt)
+		}
+	}
+	assertNoRunResources(t, report.RunID)
+	assertPrivateArtifacts(t, filepath.Join(root, "artifacts"))
+	assertAuthoritativeJournal(t, filepath.Join(root, "artifacts"), "COMPLETE")
+	assertResultContract(t, filepath.Join(root, "artifacts"))
+}
+
+func assertPreciseAttempt(t *testing.T, attempt engine.AttemptEvidence, deliveries int) {
+	t.Helper()
+	if len(attempt.ProbeDeliveries) != deliveries || len(attempt.ProbeCapabilities) == 0 || attempt.Quiescence == nil || attempt.FinalCommitted == nil || *attempt.FinalCommitted != 1 {
+		t.Fatalf("precise attempt evidence is incomplete: %#v", attempt)
+	}
+	for _, receipt := range attempt.ProbeDeliveries {
+		if receipt.Topic != attempt.Published.Topic || receipt.Partition != attempt.Published.Partition || receipt.Offset != attempt.Published.Offset || receipt.Key != attempt.Published.Key || receipt.EventSHA256 != attempt.Published.EventHash {
+			t.Fatalf("attempt %s receipt is not the published record: %#v", attempt.AttemptID, receipt)
+		}
+	}
+	for name, passed := range attempt.Quiescence.Conditions {
+		if !passed {
+			t.Fatalf("attempt %s quiescence condition %s failed", attempt.AttemptID, name)
+		}
+	}
+}
+
+func removeTargetImages(t *testing.T, paths ...string) {
+	t.Helper()
+	seen := map[string]struct{}{}
+	images := []string{}
+	for _, path := range paths {
+		target, err := spec.LoadTarget(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, service := range target.Spec.Services {
+			if _, exists := seen[service.Image]; !exists {
+				seen[service.Image] = struct{}{}
+				images = append(images, service.Image)
+			}
+		}
+	}
+	removeImages(t, images...)
+}
+
 func removeImages(t *testing.T, images ...string) {
 	t.Helper()
 	arguments := append([]string{"image", "rm", "--force"}, images...)

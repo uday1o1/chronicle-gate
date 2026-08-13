@@ -1,0 +1,57 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Target
+metadata:
+  name: order-lifecycle-r2-baseline
+  description: Correct reference workflow with stable effect idempotency.
+spec:
+  databaseSchemaVersion: order-lifecycle-v1
+  services:
+    - name: order-workflow
+      image: ghcr.io/example/order-workflow@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health:
+        type: http
+        path: /healthz
+        port: 8080
+        timeout: 20s
+        interval: 250ms
+      probe:
+        enabled: true
+        protocolVersion: chronicle-probe/v1alpha1
+        commitMode: manual_sync
+        maxControlledInFlight: 1
+        checkpoints:
+          - before_handler
+          - after_state_load
+          - after_external_effect
+          - after_db_commit
+          - before_offset_commit
+          - after_offset_commit
+        logicalClock: true
+      resources:
+        cpus: 1
+        memoryBytes: 268435456
+        pids: 128
+      dependencies: [effect-sink]
+    - name: effect-sink
+      image: ghcr.io/example/effect-sink@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health:
+        type: http
+        path: /healthz
+        port: 8080
+        timeout: 20s
+        interval: 250ms
+      probe:
+        enabled: false
+      resources:
+        cpus: 0.5
+        memoryBytes: 134217728
+        pids: 64
+      dependencies: []

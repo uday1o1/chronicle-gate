@@ -17,6 +17,20 @@ spec:
         orderId: order-1
         sku: sku-1
         quantity: 1
+    payment-requested:
+      specversion: "1.0"
+      id: payment-requested-1
+      source: /orders/order-1
+      type: dev.chronicle.payment.requested
+      subject: order-1
+      time: "2026-08-13T00:00:01Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 1
+      dataschema: scenarios/schemas/payment-requested.schema.json
+      data:
+        orderId: order-1
+        amount: 1250
   observations:
     - id: inventory-events
       kafka:
@@ -25,7 +39,13 @@ spec:
         endOffset: 100
         mode: keyed
         keyPointer: /orderId
-  invariants: []
+    - id: capture-effects
+      effects:
+        url: http://127.0.0.1/effects
+  invariants:
+    - id: one-capture-per-business-operation
+      queryFile: scenarios/queries/duplicate-processed-events.sql
+      classification: EXTERNAL_EFFECT_REGRESSION
   normalization:
     - id: remove-trace
       observation: inventory-events
@@ -38,3 +58,15 @@ spec:
       - id: workflow-lag
         type: groupLagZero
         group: order-workflow
+      - id: workflow-idle
+        type: probeIdle
+        service: order-workflow
+      - id: checkpoints-clear
+        type: checkpointsClear
+        service: order-workflow
+      - id: outbox-empty
+        type: outboxEmpty
+        service: order-workflow
+      - id: effects-idle
+        type: effectsIdle
+        service: effect-sink
