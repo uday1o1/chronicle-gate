@@ -950,6 +950,22 @@ func ValidateBundle(bundle Bundle) []Violation {
 	if bundle.Safety.SymlinksAllowed {
 		validator.add("/safety/symlinksAllowed", "bundle_symlinks", "reproduction bundles must forbid symlinks")
 	}
+	for index, image := range bundle.Images {
+		if !image.Portable && !bundle.Nonportable {
+			validator.add(fmt.Sprintf("/images/%d/portable", index), "bundle_nonportable", "embedded local images require nonportable=true")
+		}
+		if image.Archive != "" {
+			found := false
+			for _, file := range bundle.Files {
+				if file.Path == image.Archive {
+					found = true
+				}
+			}
+			if !found {
+				validator.add(fmt.Sprintf("/images/%d/archive", index), "bundle_image_archive", "embedded image archive must appear in files")
+			}
+		}
+	}
 	seen := map[string]struct{}{}
 	for index, file := range bundle.Files {
 		clean := filepath.Clean(file.Path)

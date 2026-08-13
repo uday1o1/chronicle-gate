@@ -1,20 +1,24 @@
 package spec
 
 type Bundle struct {
-	APIVersion string          `json:"apiVersion"`
-	Kind       string          `json:"kind"`
-	RunID      string          `json:"runId"`
-	Scenario   string          `json:"scenario"`
-	Targets    []string        `json:"targets"`
-	Images     []BundleImage   `json:"images"`
-	Resources  BundleResources `json:"resources"`
-	Files      []BundleFile    `json:"files"`
-	Safety     BundleSafety    `json:"safety"`
+	APIVersion        string          `json:"apiVersion"`
+	Kind              string          `json:"kind"`
+	RunID             string          `json:"runId"`
+	Scenario          string          `json:"scenario"`
+	Targets           []string        `json:"targets"`
+	Images            []BundleImage   `json:"images"`
+	Resources         BundleResources `json:"resources"`
+	Files             []BundleFile    `json:"files"`
+	Safety            BundleSafety    `json:"safety"`
+	ExpectedSignature string          `json:"expectedSignature"`
+	Nonportable       bool            `json:"nonportable"`
 }
 
 type BundleImage struct {
 	Name      string `json:"name"`
 	Reference string `json:"reference"`
+	Archive   string `json:"archive,omitempty"`
+	Portable  bool   `json:"portable"`
 }
 
 type BundleResources struct {

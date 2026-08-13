@@ -7,7 +7,8 @@
   "images": [
     {
       "name": "fulfillment-projector",
-      "reference": "ghcr.io/example/fulfillment-projector@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "reference": "ghcr.io/example/fulfillment-projector@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "portable": true
     }
   ],
   "resources": {"cpus": 2, "memoryBytes": 1073741824, "diskBytes": 10737418240},
@@ -18,5 +19,7 @@
       "size": 4096
     }
   ],
-  "safety": {"maxFiles": 1000, "maxExpandedBytes": 1073741824, "symlinksAllowed": false}
+  "safety": {"maxFiles": 1000, "maxExpandedBytes": 1073741824, "symlinksAllowed": false},
+  "expectedSignature": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "nonportable": false
 }

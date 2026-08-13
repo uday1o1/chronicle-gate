@@ -4,14 +4,46 @@
   "runId": "example-run",
   "state": "COMPLETE",
   "classification": "SEMANTIC_REGRESSION",
+  "startedAt": "2026-08-13T00:00:00Z",
+  "completedAt": "2026-08-13T00:01:00Z",
+  "nonportableImages": false,
+  "environment": {},
+  "candidate": [],
+  "failureSignature": {
+    "invariantId": "no-duplicate-reservations",
+    "classification": "SEMANTIC_REGRESSION",
+    "observationId": "no-duplicate-reservations",
+    "rowKey": "order_id=order-1|sku=sku-1",
+    "pointer": "/rows/0/reservation_count",
+    "expected": 1,
+    "actual": 2,
+    "digest": "344a2c61a869abdfc6a272ea4a35eb247158d41b619049cb8b6618ba71b6b29c"
+  },
   "violations": [
     {
-      "document": "candidate",
-      "pointer": "/inventory-reservations/order-1/sku-1",
-      "rule": "no-duplicate-reservations",
-      "message": "candidate reserved inventory twice"
+      "classification": "SEMANTIC_REGRESSION",
+      "observationId": "no-duplicate-reservations",
+      "pointer": "/rows/0/reservation_count",
+      "rowKey": "order_id=order-1|sku=sku-1",
+      "expected": 1,
+      "actual": 2,
+      "expectedHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "actualHash": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+      "message": "candidate invariant differs from the baseline contract"
     }
   ],
-  "startedAt": "2026-08-13T00:00:00Z",
-  "completedAt": "2026-08-13T00:01:00Z"
+  "confirmations": 2,
+  "minimization": {
+    "status": "complete",
+    "minimality": "proven",
+    "originalEvents": 2,
+    "finalEvents": 1,
+    "originalActions": 7,
+    "finalActions": 6,
+    "trials": 1,
+    "cacheHits": 0,
+    "acceptedTransforms": ["remove optional closure rooted at publish-diagnostic-noise"],
+    "rejections": []
+  },
+  "bundle": "reproduction.zip"
 }

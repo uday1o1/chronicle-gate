@@ -1,6 +1,7 @@
 package artifact
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -40,6 +41,44 @@ func PrepareDirectory(path string) error {
 
 // WriteJSON atomically writes private JSON and fsyncs its containing directory.
 func WriteJSON(path string, value any) error {
+	document, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode artifact: %w", err)
+	}
+	document = append(document, '\n')
+	return WriteFile(path, document)
+}
+
+// WritePublicJSON fails closed when a serialized artifact contains a resolved secret.
+func WritePublicJSON(path string, value any, secretValues []string) error {
+	document, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode artifact: %w", err)
+	}
+	if err := ValidatePublic(document, secretValues); err != nil {
+		return err
+	}
+	document = append(document, '\n')
+	return WriteFile(path, document)
+}
+
+// ValidatePublic rejects resolved secrets and database credential URLs.
+func ValidatePublic(document []byte, secretValues []string) error {
+	for _, marker := range [][]byte{[]byte("postgres://"), []byte("postgresql://")} {
+		if bytes.Contains(bytes.ToLower(document), marker) {
+			return fmt.Errorf("artifact contains a database credential URL")
+		}
+	}
+	for _, secret := range secretValues {
+		if len(secret) >= 8 && bytes.Contains(document, []byte(secret)) {
+			return fmt.Errorf("artifact contains a resolved secret value")
+		}
+	}
+	return nil
+}
+
+// WriteFile atomically writes a private file and fsyncs its containing directory.
+func WriteFile(path string, document []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create artifact parent: %w", err)
 	}
@@ -58,10 +97,8 @@ func WriteJSON(path string, value any) error {
 	if err := file.Chmod(0o600); err != nil {
 		return fmt.Errorf("secure artifact temporary file: %w", err)
 	}
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(value); err != nil {
-		return fmt.Errorf("encode artifact: %w", err)
+	if _, err := file.Write(document); err != nil {
+		return fmt.Errorf("write artifact: %w", err)
 	}
 	if err := file.Sync(); err != nil {
 		return fmt.Errorf("sync artifact: %w", err)

@@ -3,9 +3,9 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestones 0 through 2 are complete.
-Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, and the broker-realistic R1 vertical slice pass their local acceptance gates.
-Failure reduction, reproduction bundles, and precise crash-window claims remain unavailable until their later milestones pass.
+Milestones 0 through 3 are complete.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, and verified replay bundles pass their local acceptance gates.
+Precise crash-window claims remain unavailable until the probe milestone passes.
 
 ## Bootstrap
 
@@ -59,17 +59,40 @@ make build
   --candidate examples/order-lifecycle/targets/generated/candidate.yaml \
   --out run/r1 \
   --development-local-images \
-  --no-minimize \
   --json
 ```
 
 Exit code `2` is expected because the seeded candidate regression is confirmed twice after its first failure.
 The baseline processes the same physical Kafka record twice but retains one reservation.
 The candidate processes that same record twice and produces the checked-in `no-duplicate-reservations` signature.
+The default run confirms the original failure twice, minimizes optional scenario noise with fresh baseline and candidate executions, and creates text, JSON, JUnit XML, static HTML, checksums, and `reproduction.zip`.
 See [`examples/order-lifecycle/README.md`](examples/order-lifecycle/README.md) for the evidence contract and current boundaries.
 
 `--development-local-images` is intentionally nonportable.
 Publication and later reproduction workflows require named OCI digest references.
+Development replay bundles declare themselves nonportable and embed structurally verified archives for the exact local Docker image IDs.
+
+Render a completed run in any supported format with:
+
+```sh
+./bin/chronicle report --result run/r1 --format text
+./bin/chronicle report --result run/r1 --format json
+./bin/chronicle report --result run/r1 --format junit
+./bin/chronicle report --result run/r1 --format html
+```
+
+Replay verifies the ZIP manifest, paths, expanded-size limits, checksums, authored contracts, and embedded image identities before extraction or Docker access.
+It extracts inputs into a separate private staging directory and requires the replay output directory not to exist.
+
+```sh
+./bin/chronicle replay \
+  --bundle run/r1/reproduction.zip \
+  --out run/r1-replay \
+  --json
+```
+
+`events.ndjson` is the authoritative append-only audit log and is intentionally excluded from `checksums.sha256` because its final `COMPLETE` record is the last write in a successful run.
+The `report` command refuses to treat `result.json` as complete when the journal has no valid terminal record.
 
 Run the repeatable success and injected-failure cleanup gate with:
 

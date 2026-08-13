@@ -5,6 +5,7 @@ GO_BOOTSTRAP_IMAGE := docker.io/library/golang@sha256:53eeac89074db483fdf0ab3be1
 GOLANGCI_LINT_IMAGE := docker.io/golangci/golangci-lint@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240
 REFERENCE_BASELINE_IMAGE := chronicle-gate/fulfillment-projector:baseline-m2
 REFERENCE_CANDIDATE_IMAGE := chronicle-gate/fulfillment-projector:candidate-r1-m2
+REFERENCE_FLAKY_IMAGE := chronicle-gate/fulfillment-projector:flaky-r1-m3
 GO_CACHE_MOUNTS := -v chronicle-gate-go-mod-cache:/go/pkg/mod -v chronicle-gate-go-build-cache:/root/.cache/go-build
 
 HOST_GOOS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -62,7 +63,8 @@ vet: toolchain
 reference-images:
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=baseline --label dev.chronicle.reference=baseline -t $(REFERENCE_BASELINE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r1 --label dev.chronicle.reference=candidate-r1 -t $(REFERENCE_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
-	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))"
+	docker build --pull=false --build-arg PROJECTOR_VARIANT=flaky-r1 --label dev.chronicle.reference=flaky-r1 -t $(REFERENCE_FLAKY_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
+	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))" --flaky-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_FLAKY_IMAGE))"
 
 test-integration: reference-images build
 	@mkdir -p dist

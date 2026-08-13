@@ -4,21 +4,51 @@
   "title": "ChronicleGate Result",
   "type": "object",
   "additionalProperties": false,
-  "required": ["apiVersion", "kind", "runId", "state", "classification", "violations", "startedAt"],
+  "required": ["apiVersion", "kind", "runId", "state", "classification", "startedAt", "completedAt", "nonportableImages", "environment", "candidate", "violations", "confirmations", "minimization"],
   "properties": {
     "apiVersion": {"const": "chronicle.dev/v1alpha1"},
     "kind": {"const": "Result"},
     "runId": {"type": "string", "minLength": 1},
-    "state": {"enum": ["VALIDATING", "PROVISIONING", "SEEDING", "SNAPSHOTTING", "BASELINE_STARTING", "BASELINE_EXECUTING", "BASELINE_OBSERVING", "BASELINE_STOPPING", "RESTORING", "CANDIDATE_STARTING", "CANDIDATE_EXECUTING", "CANDIDATE_OBSERVING", "COMPARING", "CONFIRMING_FAILURE", "MINIMIZING", "REPORTING", "CLEANING", "COMPLETE", "INFRASTRUCTURE_ERROR", "TIMEOUT", "UNRESOLVED", "INTERRUPTED"]},
-    "classification": {"enum": ["PASS", "SEMANTIC_REGRESSION", "SCHEMA_REGRESSION", "EXTERNAL_EFFECT_REGRESSION", "PERFORMANCE_REGRESSION", "INFRASTRUCTURE_ERROR", "TIMEOUT", "FLAKY", "UNRESOLVED"]},
-    "violations": {"type": "array", "items": {
-      "type": "object", "additionalProperties": false, "required": ["document", "pointer", "rule", "message"],
-      "properties": {
-        "document": {"type": "string"}, "pointer": {"type": "string"}, "rule": {"type": "string"}, "message": {"type": "string"},
-        "classification": {"type": "string"}, "expected": {}, "actual": {}, "signatureHash": {"type": "string", "pattern": "^([0-9a-f]{64})?$"}
-      }
-    }},
+    "state": {"enum": ["VALIDATING", "PROVISIONING", "SEEDING", "SNAPSHOTTING", "BASELINE_STARTING", "BASELINE_EXECUTING", "BASELINE_OBSERVING", "BASELINE_STOPPING", "RESTORING", "CANDIDATE_STARTING", "CANDIDATE_EXECUTING", "CANDIDATE_OBSERVING", "COMPARING", "CONFIRMING_FAILURE", "MINIMIZING", "REPORTING", "CLEANING", "COMPLETE", "INFRASTRUCTURE_ERROR", "TIMEOUT", "FLAKY", "UNRESOLVED", "INTERRUPTED"]},
+    "classification": {"$ref": "#/$defs/classification"},
     "startedAt": {"type": "string", "format": "date-time"},
-    "completedAt": {"type": "string", "format": "date-time"}
+    "completedAt": {"type": "string", "format": "date-time"},
+    "nonportableImages": {"type": "boolean"},
+    "environment": {"type": "object"},
+    "baseline": {"type": "object"},
+    "candidate": {"type": "array", "items": {"type": "object"}},
+    "failureSignature": {"$ref": "#/$defs/signature"},
+    "violations": {"type": "array", "items": {"$ref": "#/$defs/violation"}},
+    "confirmations": {"type": "integer", "minimum": 0},
+    "error": {"type": "string"},
+    "minimization": {"$ref": "#/$defs/minimization"},
+    "bundle": {"type": "string"},
+    "replay": {"type": "object", "additionalProperties": false, "required": ["sourceBundleSha256", "expectedSignature"], "properties": {"sourceBundleSha256": {"$ref": "#/$defs/hash"}, "expectedSignature": {"$ref": "#/$defs/hash"}}}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "classification": {"enum": ["PASS", "SEMANTIC_REGRESSION", "SCHEMA_REGRESSION", "EXTERNAL_EFFECT_REGRESSION", "PERFORMANCE_REGRESSION", "INFRASTRUCTURE_ERROR", "TIMEOUT", "FLAKY", "UNRESOLVED"]},
+    "signature": {
+      "type": "object", "additionalProperties": false,
+      "required": ["invariantId", "classification", "observationId", "rowKey", "pointer", "expected", "actual", "digest"],
+      "properties": {"invariantId": {"type": "string"}, "classification": {"$ref": "#/$defs/classification"}, "observationId": {"type": "string"}, "rowKey": {"type": "string"}, "pointer": {"type": "string"}, "expected": {}, "actual": {}, "digest": {"$ref": "#/$defs/hash"}}
+    },
+    "violation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["classification", "observationId", "pointer", "rowKey", "expected", "actual", "expectedHash", "actualHash", "message"],
+      "properties": {"classification": {"$ref": "#/$defs/classification"}, "observationId": {"type": "string"}, "pointer": {"type": "string"}, "rowKey": {"type": "string"}, "expected": {}, "actual": {}, "expectedHash": {"$ref": "#/$defs/hash"}, "actualHash": {"$ref": "#/$defs/hash"}, "message": {"type": "string"}}
+    },
+    "minimization": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "minimality", "originalEvents", "finalEvents", "originalActions", "finalActions", "trials", "cacheHits", "acceptedTransforms", "rejections"],
+      "properties": {
+        "status": {"enum": ["skipped", "complete", "budget_exhausted"]}, "minimality": {"enum": ["proven", "not_proven", "unavailable"]},
+        "originalEvents": {"type": "integer", "minimum": 0}, "finalEvents": {"type": "integer", "minimum": 0},
+        "originalActions": {"type": "integer", "minimum": 0}, "finalActions": {"type": "integer", "minimum": 0},
+        "trials": {"type": "integer", "minimum": 0}, "cacheHits": {"type": "integer", "minimum": 0},
+        "acceptedTransforms": {"type": "array", "items": {"type": "string"}},
+        "rejections": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["transform", "outcome", "reason"], "properties": {"transform": {"type": "string"}, "outcome": {"enum": ["PASS", "SAME_FAILURE", "UNRESOLVED"]}, "reason": {"type": "string"}}}}
+      }
+    }
   }
 }

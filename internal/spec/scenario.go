@@ -35,6 +35,7 @@ type Limits struct {
 
 type Step struct {
 	ID                string              `json:"id" yaml:"id"`
+	Optional          bool                `json:"optional,omitempty" yaml:"optional,omitempty"`
 	DependsOn         []string            `json:"dependsOn,omitempty" yaml:"dependsOn,omitempty"`
 	Timeout           Duration            `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Publish           *PublishAction      `json:"publish,omitempty" yaml:"publish,omitempty"`

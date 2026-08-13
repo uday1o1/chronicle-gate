@@ -1,0 +1,108 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: offset-replay-noisy
+  description: Optional unrelated traffic must be removed without changing the R1 signature.
+spec:
+  seed: {}
+  clock:
+    start: "2026-08-13T00:00:00Z"
+  events:
+    diagnostic-noise:
+      specversion: "1.0"
+      id: diagnostic-noise-1
+      source: /orders/noise-order
+      type: dev.chronicle.inventory.requested
+      subject: noise-order
+      time: "2026-08-13T00:00:00Z"
+      datacontenttype: application/json
+      aggregateid: noise-order
+      aggregateversion: 1
+      dataschema: schemas/inventory-requested.schema.json
+      data:
+        orderId: noise-order
+        sku: noise-sku
+        quantity: 1
+    inventory-requested:
+      specversion: "1.0"
+      id: inventory-requested-1
+      source: /orders/order-1
+      type: dev.chronicle.inventory.requested
+      subject: order-1
+      time: "2026-08-13T00:00:01Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 1
+      dataschema: schemas/inventory-requested.schema.json
+      data:
+        orderId: order-1
+        sku: sku-1
+        quantity: 1
+  steps:
+    - id: publish-diagnostic-noise
+      optional: true
+      publish:
+        event: diagnostic-noise
+        topic: diagnostics
+        partition: 0
+        key: noise-order
+    - id: publish-inventory
+      publish:
+        event: inventory-requested
+        topic: inventory
+        partition: 0
+        key: order-1
+    - id: observe-first-pass
+      dependsOn: [publish-inventory]
+      timeout: 15s
+      observe:
+        observation: inventory-reservations
+    - id: stop-projector
+      dependsOn: [observe-first-pass]
+      stop:
+        service: fulfillment-projector
+    - id: rewind-projector
+      dependsOn: [stop-projector]
+      rewindOffset:
+        service: fulfillment-projector
+        group: fulfillment-projector
+        topic: inventory
+        partition: 0
+        toOffset: 0
+    - id: restart-projector
+      dependsOn: [rewind-projector]
+      restart:
+        service: fulfillment-projector
+    - id: observe-replay
+      dependsOn: [restart-projector]
+      timeout: 15s
+      observe:
+        observation: inventory-reservations
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 2s
+    conditions:
+      - id: projector-lag
+        type: groupLagZero
+        group: fulfillment-projector
+  observations:
+    - id: inventory-reservations
+      sql:
+        queryFile: queries/inventory-reservations.sql
+        orderBy: [order_id, sku]
+  invariants:
+    - id: no-duplicate-reservations
+      queryFile: queries/duplicate-reservations.sql
+      classification: SEMANTIC_REGRESSION
+  normalization:
+    - id: remove-observed-at
+      observation: inventory-reservations
+      type: remove
+      pointer: /rows/0/observed_at
+  limits:
+    maxSteps: 100
+    maxEvents: 100
+    maxRunDuration: 10m
+    confirmationAttempts: 2
+    minimizationTrials: 20
+    minimizationDuration: 5m

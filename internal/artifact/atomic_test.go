@@ -17,6 +17,16 @@ func TestPrepareDirectoryRefusesExistingData(t *testing.T) {
 	}
 }
 
+func TestWritePublicJSONRejectsResolvedSecret(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "result.json")
+	if err := WritePublicJSON(path, map[string]string{"message": "canary-secret-value"}, []string{"canary-secret-value"}); err == nil {
+		t.Fatal("expected resolved secret rejection")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("secret artifact exists: %v", err)
+	}
+}
+
 func TestWriteJSONUsesPrivateMode(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "nested", "result.json")

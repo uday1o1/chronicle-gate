@@ -25,7 +25,6 @@ func newRunCommand(runner func(context.Context, engine.Config) engine.Report) *c
 		Short: "Run sequential semantic qualification",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			_ = noMinimize
 			scenario, scenarioErr := spec.LoadScenario(scenarioPath)
 			baseline, baselineErr := spec.LoadTarget(baselinePath)
 			candidate, candidateErr := spec.LoadTarget(candidatePath)
@@ -53,10 +52,14 @@ func newRunCommand(runner func(context.Context, engine.Config) engine.Report) *c
 
 			report := runner(command.Context(), engine.Config{
 				Scenario: scenario, Baseline: baseline, Candidate: candidate, ScenarioRoot: filepath.Dir(scenarioPath),
-				Output: outputPath, ImageLock: imageLockPath,
+				Output: outputPath, ImageLock: imageLockPath, ScenarioPath: scenarioPath, BaselinePath: baselinePath,
+				CandidatePath: candidatePath, NoMinimize: noMinimize,
 			})
 			if err := writeRunReport(command, report, machineReadable); err != nil {
 				return newCommandError(ExitInfrastructure, "OUTPUT_ERROR", err, false)
+			}
+			if report.State == "INTERRUPTED" {
+				return newCommandError(ExitInterrupted, "INTERRUPTED", fmt.Errorf("qualification was interrupted"), true)
 			}
 			switch report.Classification {
 			case "PASS":

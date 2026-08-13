@@ -4,8 +4,8 @@
   "additionalProperties": false,
   "required": ["orderId", "sku", "quantity"],
   "properties": {
-    "orderId": {"type": "string"},
-    "sku": {"type": "string"},
+    "orderId": {"type": "string", "minLength": 1},
+    "sku": {"type": "string", "minLength": 1},
     "quantity": {"type": "integer", "minimum": 1}
   }
 }

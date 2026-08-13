@@ -23,6 +23,19 @@ import (
 
 const labelRun = "dev.chronicle.run"
 
+// CleanupError marks a failed exact-scope cleanup so it outranks timeout or interruption.
+type CleanupError struct {
+	Err error
+}
+
+func (err *CleanupError) Error() string {
+	return err.Err.Error()
+}
+
+func (err *CleanupError) Unwrap() error {
+	return err.Err
+}
+
 // Environment contains the shared broker and database for one run.
 type Environment struct {
 	RunID                 string
@@ -73,7 +86,9 @@ func StartEnvironment(ctx context.Context, runID, lockPath string) (_ *Environme
 	}
 	defer func() {
 		if resultErr != nil {
-			resultErr = errors.Join(resultErr, environment.Cleanup(context.Background()))
+			if cleanupErr := environment.Cleanup(context.Background()); cleanupErr != nil {
+				resultErr = errors.Join(resultErr, &CleanupError{Err: cleanupErr})
+			}
 		}
 	}()
 	labels := map[string]string{labelRun: runID}
@@ -154,6 +169,11 @@ func configureDockerHost(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// ConfigureDockerHost resolves the active Docker CLI context for Moby API callers.
+func ConfigureDockerHost(ctx context.Context) error {
+	return configureDockerHost(ctx)
 }
 
 func (environment *Environment) Cleanup(ctx context.Context) error {

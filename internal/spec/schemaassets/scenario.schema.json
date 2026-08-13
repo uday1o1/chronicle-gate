@@ -61,6 +61,7 @@
       "type": "object", "additionalProperties": false, "required": ["id"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "optional": {"type": "boolean"},
         "dependsOn": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
         "timeout": {"$ref": "#/$defs/duration"},
         "publish": {

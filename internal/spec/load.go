@@ -53,6 +53,39 @@ func LoadBundle(path string) (Bundle, error) {
 	return value, nil
 }
 
+func DecodeBundleJSON(document []byte) (Bundle, error) {
+	return decodeJSONDocument(document, "Bundle", "bundle manifest", Bundle{})
+}
+
+func DecodeScenarioJSON(document []byte) (Scenario, error) {
+	return decodeJSONDocument(document, "Scenario", "scenario", Scenario{})
+}
+
+func DecodeTargetJSON(document []byte) (Target, error) {
+	return decodeJSONDocument(document, "Target", "target", Target{})
+}
+
+func decodeJSONDocument[T any](document []byte, kind, label string, zero T) (T, error) {
+	var raw any
+	decoder := json.NewDecoder(bytes.NewReader(document))
+	if err := decoder.Decode(&raw); err != nil {
+		return zero, fmt.Errorf("parse %s: %w", label, err)
+	}
+	if err := ensureJSONEOF(decoder, label); err != nil {
+		return zero, err
+	}
+	if err := validateSchema(kind, raw); err != nil {
+		return zero, err
+	}
+	var value T
+	decoder = json.NewDecoder(bytes.NewReader(document))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return zero, fmt.Errorf("strictly decode %s: %w", label, err)
+	}
+	return value, ensureJSONEOF(decoder, label)
+}
+
 func readBounded(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {

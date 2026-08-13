@@ -25,7 +25,7 @@ func TestRunCLIMapsConfirmedRegression(t *testing.T) {
 		"--json",
 	}, &stdout, &stderr, Dependencies{Run: func(_ context.Context, _ engine.Config) engine.Report {
 		called = true
-		return engine.Report{SchemaVersion: engine.ReportSchemaVersion, RunID: "test", State: "COMPLETE", Classification: "SEMANTIC_REGRESSION"}
+		return engine.Report{APIVersion: "chronicle.dev/v1alpha1", Kind: "Result", RunID: "test", State: "COMPLETE", Classification: "SEMANTIC_REGRESSION"}
 	}})
 	if !called {
 		t.Fatal("run dependency was not invoked")
@@ -39,5 +39,22 @@ func TestRunCLIMapsConfirmedRegression(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr contaminated JSON: %s", stderr.String())
+	}
+}
+
+func TestRunCLIMapsInterruptedState(t *testing.T) {
+	repository := filepath.Join("..", "..")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Execute(context.Background(), []string{
+		"run", "--scenario", filepath.Join(repository, "examples/order-lifecycle/scenarios/r1-offset-rewind.yaml"),
+		"--baseline", filepath.Join(repository, "examples/order-lifecycle/targets/baseline.yaml"),
+		"--candidate", filepath.Join(repository, "examples/order-lifecycle/targets/candidate.yaml"),
+		"--out", filepath.Join(t.TempDir(), "run"), "--json",
+	}, &stdout, &stderr, Dependencies{Run: func(context.Context, engine.Config) engine.Report {
+		return engine.Report{APIVersion: "chronicle.dev/v1alpha1", Kind: "Result", RunID: "interrupted", State: "INTERRUPTED", Classification: "UNRESOLVED"}
+	}})
+	if code != ExitInterrupted {
+		t.Fatalf("interrupted run exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }

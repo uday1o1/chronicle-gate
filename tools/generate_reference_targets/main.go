@@ -14,10 +14,11 @@ import (
 func main() {
 	baselineImage := flag.String("baseline-image", "", "content-addressed baseline Docker image ID")
 	candidateImage := flag.String("candidate-image", "", "content-addressed candidate Docker image ID")
+	flakyImage := flag.String("flaky-image", "", "content-addressed deterministic flaky Docker image ID")
 	output := flag.String("out", "examples/order-lifecycle/targets/generated", "generated target directory")
 	flag.Parse()
 
-	for name, image := range map[string]string{"baseline": *baselineImage, "candidate": *candidateImage} {
+	for name, image := range map[string]string{"baseline": *baselineImage, "candidate": *candidateImage, "flaky": *flakyImage} {
 		if !imagelock.IsLocalImageID(image) {
 			fatalf("%s image %q is not an exact sha256 Docker image ID", name, image)
 		}
@@ -30,6 +31,9 @@ func main() {
 	}
 	if err := writeTarget(filepath.Join(*output, "candidate.yaml"), *candidateImage); err != nil {
 		fatalf("write candidate target: %v", err)
+	}
+	if err := writeTarget(filepath.Join(*output, "flaky.yaml"), *flakyImage); err != nil {
+		fatalf("write flaky target: %v", err)
 	}
 }
 

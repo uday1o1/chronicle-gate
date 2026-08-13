@@ -133,7 +133,9 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING id`, event.ID, record.Topic, record.Partition, record.Offset, string(record.Key)).Scan(&deliveryID); err != nil {
 			return fmt.Errorf("insert delivery evidence: %w", err)
 		}
-		if variant == "baseline" {
+		attemptID := os.Getenv("CHRONICLE_ATTEMPT_ID")
+		guardEnabled := variant == "baseline" || variant == "flaky-r1" && strings.HasSuffix(attemptID, "-1")
+		if guardEnabled {
 			var exists bool
 			if err := transaction.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM inventory_reservations WHERE event_id = $1)", event.ID).Scan(&exists); err != nil {
 				return fmt.Errorf("check idempotency guard: %w", err)

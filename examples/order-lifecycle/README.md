@@ -33,5 +33,19 @@ The integration suite queries Docker after both a successful run and an injected
 
 The generated local image IDs are content-addressed but not registry-resolvable or cross-platform portable.
 They are accepted only with `--development-local-images`.
-Milestone 3 will add generalized confirmation, minimization, reports, and reproduction bundles.
 Milestone 4 will add the authenticated probe and precise crash checkpoints.
+
+## Stable reduction and replay
+
+`r1-offset-rewind-noisy.yaml` adds one optional, independent diagnostic event on an unsubscribed topic.
+The minimizer first confirms the original candidate signature twice, then tests the optional closure with two fresh baseline and candidate comparisons.
+The accepted reduction removes one event and one executable action while preserving the exact checked-in signature.
+The result reports whether relative 1-minimality was proven, not proven, or unavailable.
+
+An intentionally flaky projector alternates between defective and guarded behavior by attempt identity.
+Its completed semantic outcomes disagree, so the run returns `FLAKY` with exit code `5`, performs zero reducer trials, and creates no reproduction bundle.
+
+Every confirmed regression writes `report.json`, `report.txt`, `junit.xml`, `report.html`, `checksums.sha256`, and `reproduction.zip`.
+Local development bundles embed exact image archives and remain explicitly nonportable.
+Before replay, ChronicleGate verifies normalized unique paths, regular-file types, file and expanded-size limits, SHA-256 records, strict contracts, exact target identities, OCI descriptors, layer digests, and uncompressed layer DiffIDs.
+The integration gate deletes both source images before replay to prove that the verified embedded archives restore the exact content-addressed images.

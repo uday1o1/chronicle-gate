@@ -82,5 +82,7 @@ func newRootCommand(dependencies Dependencies) *cobra.Command {
 	root.AddCommand(newDoctorCommand(dependencies.Doctor))
 	root.AddCommand(newValidateCommand())
 	root.AddCommand(newRunCommand(dependencies.Run))
+	root.AddCommand(newReportCommand())
+	root.AddCommand(newReplayCommand(dependencies.Run))
 	return root
 }
