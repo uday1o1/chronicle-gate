@@ -3,9 +3,9 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestones 0 and 1 are complete.
-Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, and offline validation pass their local acceptance gates.
-No semantic replay or release-qualification claim is made until its corresponding acceptance gate passes.
+Milestones 0 through 2 are complete.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, and the broker-realistic R1 vertical slice pass their local acceptance gates.
+Failure reduction, reproduction bundles, and precise crash-window claims remain unavailable until their later milestones pass.
 
 ## Bootstrap
 
@@ -43,6 +43,39 @@ Invalid contracts return exit code `3` before any Docker access.
 The native macOS ARM64 binary and cross-built Linux ARM64 and AMD64 binaries execute successfully.
 The checked-in Redpanda, PostgreSQL, Go bootstrap, and golangci-lint OCI indexes contain the exact locked Linux ARM64 and AMD64 child manifests.
 All checked-in scenario, target, workload, result, and bundle examples pass both schema and semantic validation and typed-model round trips.
+
+## Run the broker-realistic R1 slice
+
+The R1 walkthrough requires Docker with at least 4 CPUs, 6 GiB of memory, and the locked Redpanda and PostgreSQL images available for the local architecture.
+The reference image build is a repository-trusted development workflow and runs before `chronicle run`.
+It creates two distinct local content-addressed Docker images and generates ignored target manifests containing their exact image IDs.
+
+```sh
+make reference-images
+make build
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r1-offset-rewind.yaml \
+  --baseline examples/order-lifecycle/targets/generated/baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/candidate.yaml \
+  --out run/r1 \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+Exit code `2` is expected because the seeded candidate regression is confirmed twice after its first failure.
+The baseline processes the same physical Kafka record twice but retains one reservation.
+The candidate processes that same record twice and produces the checked-in `no-duplicate-reservations` signature.
+See [`examples/order-lifecycle/README.md`](examples/order-lifecycle/README.md) for the evidence contract and current boundaries.
+
+`--development-local-images` is intentionally nonportable.
+Publication and later reproduction workflows require named OCI digest references.
+
+Run the repeatable success and injected-failure cleanup gate with:
+
+```sh
+make test-integration
+```
 
 ## License
 

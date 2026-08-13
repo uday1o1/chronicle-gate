@@ -3,6 +3,8 @@ SHELL := /bin/sh
 GO_VERSION := 1.26.6
 GO_BOOTSTRAP_IMAGE := docker.io/library/golang@sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd
 GOLANGCI_LINT_IMAGE := docker.io/golangci/golangci-lint@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240
+REFERENCE_BASELINE_IMAGE := chronicle-gate/fulfillment-projector:baseline-m2
+REFERENCE_CANDIDATE_IMAGE := chronicle-gate/fulfillment-projector:candidate-r1-m2
 GO_CACHE_MOUNTS := -v chronicle-gate-go-mod-cache:/go/pkg/mod -v chronicle-gate-go-build-cache:/root/.cache/go-build
 
 HOST_GOOS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -25,7 +27,7 @@ GO_ENV := env GOTOOLCHAIN=auto
 GOFMT_CMD := gofmt
 endif
 
-.PHONY: all build build-cross clean fmt fmt-check lint test test-integration test-e2e fuzz-smoke vet verify toolchain tidy
+.PHONY: all build build-cross clean fmt fmt-check lint reference-images test test-integration test-e2e fuzz-smoke vet verify toolchain tidy
 
 all: build
 
@@ -57,11 +59,17 @@ test: toolchain
 vet: toolchain
 	$(GO_CMD) vet ./...
 
-test-integration:
-	@echo "No integration tests are defined before Milestone 2."
+reference-images:
+	docker build --pull=false --build-arg PROJECTOR_VARIANT=baseline --label dev.chronicle.reference=baseline -t $(REFERENCE_BASELINE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
+	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r1 --label dev.chronicle.reference=candidate-r1 -t $(REFERENCE_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
+	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))"
 
-test-e2e:
-	@echo "No end-to-end tests are defined before Milestone 2."
+test-integration: reference-images build
+	@mkdir -p dist
+	$(GO_ENV) CGO_ENABLED=0 GOOS=$(HOST_GOOS) GOARCH=$(HOST_GOARCH) go test -c -tags=integration -o dist/chronicle-integration.test ./tests/integration
+	./dist/chronicle-integration.test -test.v
+
+test-e2e: test-integration
 
 fuzz-smoke: toolchain
 	$(GO_CMD) test -run '^$$' ./...

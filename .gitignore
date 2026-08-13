@@ -3,6 +3,7 @@
 /coverage/
 /dist/
 /run/
+/examples/order-lifecycle/targets/generated/
 *.coverprofile
 *.out
 *.test

@@ -57,8 +57,18 @@ func sortedViolations(violations []Violation) []Violation {
 	return violations
 }
 
-// ValidateTarget validates one authored target without contacting Docker.
+// ValidationOptions controls explicitly nonportable development validation.
+type ValidationOptions struct {
+	AllowLocalImageIDs bool
+}
+
+// ValidateTarget validates one publication-mode authored target without contacting Docker.
 func ValidateTarget(target Target) []Violation {
+	return ValidateTargetWithOptions(target, ValidationOptions{})
+}
+
+// ValidateTargetWithOptions validates one authored target without contacting Docker.
+func ValidateTargetWithOptions(target Target, options ValidationOptions) []Violation {
 	validator := validation{document: "target"}
 	if target.APIVersion != APIVersion {
 		validator.add("/apiVersion", "api_version", "apiVersion must be chronicle.dev/v1alpha1")
@@ -77,7 +87,7 @@ func ValidateTarget(target Target) []Violation {
 			validator.add(pointer+"/name", "unique_service", fmt.Sprintf("service %q is duplicated", service.Name))
 		}
 		services[service.Name] = service
-		if err := imagelock.ValidatePublicationReference(service.Image); err != nil {
+		if err := imagelock.ValidatePublicationReference(service.Image); err != nil && (!options.AllowLocalImageIDs || !imagelock.IsLocalImageID(service.Image)) {
 			validator.add(pointer+"/image", "immutable_image", err.Error())
 		}
 		for key := range service.Environment {
@@ -162,7 +172,12 @@ func validateServiceCycles(services []Service, validator *validation) {
 
 // ValidateScenarioAndTarget validates the complete authored execution contract without external processes.
 func ValidateScenarioAndTarget(scenario Scenario, target Target, root string) []Violation {
-	violations := append([]Violation{}, ValidateTarget(target)...)
+	return ValidateScenarioAndTargetWithOptions(scenario, target, root, ValidationOptions{})
+}
+
+// ValidateScenarioAndTargetWithOptions validates contracts in an explicit execution mode.
+func ValidateScenarioAndTargetWithOptions(scenario Scenario, target Target, root string, options ValidationOptions) []Violation {
+	violations := append([]Violation{}, ValidateTargetWithOptions(target, options)...)
 	validator := validation{document: "scenario"}
 	if scenario.APIVersion != APIVersion {
 		validator.add("/apiVersion", "api_version", "apiVersion must be chronicle.dev/v1alpha1")
@@ -829,7 +844,8 @@ func CompareTargets(baseline, candidate Target, allowed []AllowedTargetDifferenc
 		}
 		baseRepository, _, baseImageErr := imagelock.ParseImmutableReference(base.Image)
 		candidateRepository, _, candidateImageErr := imagelock.ParseImmutableReference(candidateService.Image)
-		if baseImageErr != nil || candidateImageErr != nil || baseRepository != candidateRepository {
+		bothLocal := imagelock.IsLocalImageID(base.Image) && imagelock.IsLocalImageID(candidateService.Image)
+		if !bothLocal && (baseImageErr != nil || candidateImageErr != nil || baseRepository != candidateRepository) {
 			recordDifference(servicePointer+"/image", allow, &validator)
 		}
 		base.Image = ""

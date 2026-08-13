@@ -308,6 +308,24 @@ func TestCompareTargets(t *testing.T) {
 	assertRule(t, CompareTargets(baseline, candidate, allowed), "database_schema_match")
 }
 
+func TestLocalImageIDsRequireExplicitDevelopmentMode(t *testing.T) {
+	t.Parallel()
+	target, err := LoadTarget(repositoryPath("examples", "order-lifecycle", "targets", "baseline.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.Spec.Services[0].Image = "sha256:" + strings.Repeat("a", 64)
+	assertRule(t, ValidateTarget(target), "immutable_image")
+	if violations := ValidateTargetWithOptions(target, ValidationOptions{AllowLocalImageIDs: true}); len(violations) != 0 {
+		t.Fatalf("development-local image ID rejected: %#v", violations)
+	}
+	candidate := cloneJSON(t, target)
+	candidate.Spec.Services[0].Image = "sha256:" + strings.Repeat("b", 64)
+	if violations := CompareTargets(target, candidate, nil); len(violations) != 0 {
+		t.Fatalf("local digest-only target difference rejected: %#v", violations)
+	}
+}
+
 func TestPayloadSchemaRejectsNestedExternalReference(t *testing.T) {
 	t.Parallel()
 

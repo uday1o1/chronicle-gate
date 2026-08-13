@@ -8,6 +8,12 @@ import (
 
 var sha256DigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
+// IsLocalImageID reports whether reference is a Docker content-addressed image ID.
+// Local IDs are immutable but nonportable and are never valid for publication.
+func IsLocalImageID(reference string) bool {
+	return sha256DigestPattern.MatchString(reference)
+}
+
 // ParseImmutableReference validates an OCI reference used in publication mode.
 // A source tag may be retained before the digest, but a digest is mandatory.
 func ParseImmutableReference(reference string) (repository string, digest string, err error) {

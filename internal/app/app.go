@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/uday1o1/chronicle-gate/internal/buildinfo"
 	"github.com/uday1o1/chronicle-gate/internal/doctor"
+	"github.com/uday1o1/chronicle-gate/internal/engine"
 )
 
 const errorSchemaVersion = "chronicle.dev/error/v1alpha1"
@@ -19,6 +20,7 @@ const errorSchemaVersion = "chronicle.dev/error/v1alpha1"
 type Dependencies struct {
 	Doctor *doctor.Checker
 	Build  buildinfo.Info
+	Run    func(context.Context, engine.Config) engine.Report
 }
 
 // Execute runs ChronicleGate without terminating the process.
@@ -61,6 +63,9 @@ func newRootCommand(dependencies Dependencies) *cobra.Command {
 	if dependencies.Build == (buildinfo.Info{}) {
 		dependencies.Build = buildinfo.Current()
 	}
+	if dependencies.Run == nil {
+		dependencies.Run = engine.Run
+	}
 
 	root := &cobra.Command{
 		Use:           "chronicle",
@@ -76,5 +81,6 @@ func newRootCommand(dependencies Dependencies) *cobra.Command {
 	root.AddCommand(newVersionCommand(dependencies.Build))
 	root.AddCommand(newDoctorCommand(dependencies.Doctor))
 	root.AddCommand(newValidateCommand())
+	root.AddCommand(newRunCommand(dependencies.Run))
 	return root
 }

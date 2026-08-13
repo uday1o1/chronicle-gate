@@ -1,0 +1,10 @@
+{
+  "invariantId": "no-duplicate-reservations",
+  "classification": "SEMANTIC_REGRESSION",
+  "observationId": "no-duplicate-reservations",
+  "rowKey": "order_id=order-1|sku=sku-1",
+  "pointer": "/rows/0/reservation_count",
+  "expected": 1,
+  "actual": 2,
+  "digest": "344a2c61a869abdfc6a272ea4a35eb247158d41b619049cb8b6618ba71b6b29c"
+}

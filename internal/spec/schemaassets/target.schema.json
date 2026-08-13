@@ -20,7 +20,7 @@
   "$defs": {
     "metadata": {"type": "object", "additionalProperties": false, "required": ["name"], "properties": {"name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}, "description": {"type": "string"}}},
     "duration": {"type": "string", "pattern": "^(0|[1-9][0-9]*)(ns|us|µs|ms|s|m|h)([0-9]+(ns|us|µs|ms|s|m|h))*$"},
-    "image": {"type": "string", "pattern": "^[^@[:space:]]+@sha256:[0-9a-f]{64}$"},
+    "image": {"type": "string", "pattern": "^(?:[^@[:space:]]+@sha256:[0-9a-f]{64}|sha256:[0-9a-f]{64})$"},
     "service": {
       "type": "object", "additionalProperties": false,
       "required": ["name", "image", "command", "args", "environment", "secretEnvironment", "health", "probe", "resources", "dependencies"],
