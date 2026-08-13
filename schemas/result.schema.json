@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/result.schema.json",
+  "title": "ChronicleGate Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "runId", "state", "classification", "violations", "startedAt"],
+  "properties": {
+    "apiVersion": {"const": "chronicle.dev/v1alpha1"},
+    "kind": {"const": "Result"},
+    "runId": {"type": "string", "minLength": 1},
+    "state": {"enum": ["VALIDATING", "PROVISIONING", "SEEDING", "SNAPSHOTTING", "BASELINE_STARTING", "BASELINE_EXECUTING", "BASELINE_OBSERVING", "BASELINE_STOPPING", "RESTORING", "CANDIDATE_STARTING", "CANDIDATE_EXECUTING", "CANDIDATE_OBSERVING", "COMPARING", "CONFIRMING_FAILURE", "MINIMIZING", "REPORTING", "CLEANING", "COMPLETE", "INFRASTRUCTURE_ERROR", "TIMEOUT", "UNRESOLVED", "INTERRUPTED"]},
+    "classification": {"enum": ["PASS", "SEMANTIC_REGRESSION", "SCHEMA_REGRESSION", "EXTERNAL_EFFECT_REGRESSION", "PERFORMANCE_REGRESSION", "INFRASTRUCTURE_ERROR", "TIMEOUT", "FLAKY", "UNRESOLVED"]},
+    "violations": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["document", "pointer", "rule", "message"],
+      "properties": {
+        "document": {"type": "string"}, "pointer": {"type": "string"}, "rule": {"type": "string"}, "message": {"type": "string"},
+        "classification": {"type": "string"}, "expected": {}, "actual": {}, "signatureHash": {"type": "string", "pattern": "^([0-9a-f]{64})?$"}
+      }
+    }},
+    "startedAt": {"type": "string", "format": "date-time"},
+    "completedAt": {"type": "string", "format": "date-time"}
+  }
+}

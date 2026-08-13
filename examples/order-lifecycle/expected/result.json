@@ -1,0 +1,17 @@
+{
+  "apiVersion": "chronicle.dev/v1alpha1",
+  "kind": "Result",
+  "runId": "example-run",
+  "state": "COMPLETE",
+  "classification": "SEMANTIC_REGRESSION",
+  "violations": [
+    {
+      "document": "candidate",
+      "pointer": "/inventory-reservations/order-1/sku-1",
+      "rule": "no-duplicate-reservations",
+      "message": "candidate reserved inventory twice"
+    }
+  ],
+  "startedAt": "2026-08-13T00:00:00Z",
+  "completedAt": "2026-08-13T00:01:00Z"
+}

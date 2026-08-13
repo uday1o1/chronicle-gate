@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/bundle.schema.json",
+  "title": "ChronicleGate Reproduction Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "runId", "scenario", "targets", "images", "resources", "files", "safety"],
+  "properties": {
+    "apiVersion": {"const": "chronicle.dev/v1alpha1"},
+    "kind": {"const": "Bundle"},
+    "runId": {"type": "string", "minLength": 1},
+    "scenario": {"type": "string", "minLength": 1},
+    "targets": {"type": "array", "minItems": 2, "items": {"type": "string", "minLength": 1}},
+    "images": {"type": "array", "minItems": 1, "items": {
+      "type": "object", "additionalProperties": false, "required": ["name", "reference"],
+      "properties": {"name": {"type": "string"}, "reference": {"type": "string", "pattern": "^[^@[:space:]]+@sha256:[0-9a-f]{64}$"}}
+    }},
+    "resources": {
+      "type": "object", "additionalProperties": false, "required": ["cpus", "memoryBytes", "diskBytes"],
+      "properties": {"cpus": {"type": "number", "exclusiveMinimum": 0}, "memoryBytes": {"type": "integer", "minimum": 1}, "diskBytes": {"type": "integer", "minimum": 1}}
+    },
+    "files": {"type": "array", "minItems": 1, "items": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256", "size"],
+      "properties": {"path": {"type": "string", "minLength": 1, "not": {"pattern": "(^/|(^|/)\\.\\.(/|$))"}}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "size": {"type": "integer", "minimum": 0}}
+    }},
+    "safety": {
+      "type": "object", "additionalProperties": false, "required": ["maxFiles", "maxExpandedBytes", "symlinksAllowed"],
+      "properties": {"maxFiles": {"type": "integer", "minimum": 1}, "maxExpandedBytes": {"type": "integer", "minimum": 1}, "symlinksAllowed": {"const": false}}
+    }
+  }
+}

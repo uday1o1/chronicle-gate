@@ -75,5 +75,6 @@ func newRootCommand(dependencies Dependencies) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.AddCommand(newVersionCommand(dependencies.Build))
 	root.AddCommand(newDoctorCommand(dependencies.Doctor))
+	root.AddCommand(newValidateCommand())
 	return root
 }

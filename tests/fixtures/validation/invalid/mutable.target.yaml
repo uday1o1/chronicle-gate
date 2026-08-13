@@ -1,0 +1,17 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Target
+metadata:
+  name: mutable-image
+spec:
+  databaseSchemaVersion: v1
+  services:
+    - name: service
+      image: example.invalid/service:latest
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health: {type: tcp, port: 8080, timeout: 5s, interval: 1s}
+      probe: {enabled: false}
+      resources: {cpus: 1, memoryBytes: 67108864, pids: 16}
+      dependencies: []

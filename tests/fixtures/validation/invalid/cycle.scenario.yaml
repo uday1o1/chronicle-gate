@@ -1,0 +1,30 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: cycle
+spec:
+  seed: {}
+  clock: {}
+  events: {}
+  steps:
+    - id: first
+      dependsOn: [second]
+      advanceClock: {by: 1s}
+    - id: second
+      dependsOn: [first]
+      advanceClock: {by: 1s}
+  quiescence:
+    timeout: 10s
+    stabilityWindow: 1s
+    conditions:
+      - {id: idle, type: effectsIdle}
+  observations: []
+  invariants: []
+  normalization: []
+  limits:
+    maxSteps: 10
+    maxEvents: 10
+    maxRunDuration: 1m
+    confirmationAttempts: 2
+    minimizationTrials: 10
+    minimizationDuration: 1m

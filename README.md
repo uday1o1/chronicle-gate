@@ -3,7 +3,8 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestone 0 is complete: reproducible bootstrap, immutable image locks, and environment diagnostics pass their local acceptance gate.
+Milestones 0 and 1 are complete.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, and offline validation pass their local acceptance gates.
 No semantic replay or release-qualification claim is made until its corresponding acceptance gate passes.
 
 ## Bootstrap
@@ -21,10 +22,27 @@ make verify
 `doctor` checks host workspace capacity and loopback port allocation, then verifies the Docker server and every locked OCI image index.
 The disk and loopback checks describe host-visible resources only.
 
+## Validate authored contracts
+
+Validation is deliberately offline and does not contact Docker or any target service.
+It applies the bundled Draft 2020-12 JSON Schemas before strict Go decoding, then checks dependency graphs, runtime references, immutable images, fault ordering, observer contracts, normalization rules, and bounded execution limits.
+
+```sh
+./bin/chronicle validate \
+  --scenario examples/order-lifecycle/scenarios/r1-offset-rewind.yaml \
+  --target examples/order-lifecycle/targets/baseline.yaml \
+  --json
+```
+
+The public schemas live in [`schemas/`](schemas/).
+The R1 authored-contract example lives in [`examples/order-lifecycle/`](examples/order-lifecycle/).
+Invalid contracts return exit code `3` before any Docker access.
+
 ## Status
 
 The native macOS ARM64 binary and cross-built Linux ARM64 and AMD64 binaries execute successfully.
 The checked-in Redpanda, PostgreSQL, Go bootstrap, and golangci-lint OCI indexes contain the exact locked Linux ARM64 and AMD64 child manifests.
+All checked-in scenario, target, workload, result, and bundle examples pass both schema and semantic validation and typed-model round trips.
 
 ## License
 

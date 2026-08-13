@@ -1,0 +1,40 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Workload
+metadata:
+  name: order-lifecycle
+  description: Semantic observations for the synthetic order lifecycle.
+spec:
+  events:
+    inventory-requested:
+      specversion: "1.0"
+      id: inventory-requested-1
+      source: /orders/order-1
+      type: dev.chronicle.inventory.requested
+      subject: order-1
+      time: "2026-08-13T00:00:01Z"
+      datacontenttype: application/json
+      data:
+        orderId: order-1
+        sku: sku-1
+        quantity: 1
+  observations:
+    - id: inventory-events
+      kafka:
+        topic: inventory-events
+        startOffset: 0
+        endOffset: 100
+        mode: keyed
+        keyPointer: /orderId
+  invariants: []
+  normalization:
+    - id: remove-trace
+      observation: inventory-events
+      type: remove
+      pointer: /traceId
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 2s
+    conditions:
+      - id: workflow-lag
+        type: groupLagZero
+        group: order-workflow
