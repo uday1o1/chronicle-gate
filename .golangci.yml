@@ -1,0 +1,19 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - nilerr
+    - staticcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

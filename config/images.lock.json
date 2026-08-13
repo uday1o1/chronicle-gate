@@ -1,0 +1,55 @@
+{
+  "$schema": "./images.lock.schema.json",
+  "schemaVersion": "chronicle.dev/images-lock/v1alpha1",
+  "resolvedAt": "2026-08-13",
+  "images": [
+    {
+      "name": "redpanda",
+      "role": "runtime",
+      "source": "docker.redpanda.com/redpandadata/redpanda:v26.2.1",
+      "reference": "docker.redpanda.com/redpandadata/redpanda@sha256:9a47c1f8d6736f98fa2616f6f0b715c051cb0bdac1a1176e38321bf45a5b572d",
+      "indexDigest": "sha256:9a47c1f8d6736f98fa2616f6f0b715c051cb0bdac1a1176e38321bf45a5b572d",
+      "platforms": {
+        "linux/amd64": "sha256:34f9fba9241bf45a12d3a7763da50be1e3d57c722d72a895eb619e140a1b9768",
+        "linux/arm64": "sha256:27015025f219066323380aed804f9e30befd83235a2bb43eba6c75c5f2071113"
+      },
+      "reason": "Current Redpanda 26.2.1 release with native AMD64 and ARM64 manifests."
+    },
+    {
+      "name": "postgresql",
+      "role": "runtime",
+      "source": "docker.io/library/postgres:18.4-alpine",
+      "reference": "docker.io/library/postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15",
+      "indexDigest": "sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15",
+      "platforms": {
+        "linux/amd64": "sha256:b6a16ed0eb96e2c362811f7eeb951eac8b459e7b40be4149ea5444aa7c65569b",
+        "linux/arm64": "sha256:122c9942437efcbbb8d595fc578dee7d26ee1543c2a8634d183adfa4a1e55b4d"
+      },
+      "reason": "PostgreSQL 18.4 security release on the Alpine variant with native AMD64 and ARM64 manifests."
+    },
+    {
+      "name": "go-bootstrap",
+      "role": "toolchain",
+      "source": "docker.io/library/golang:1.26.5-bookworm",
+      "reference": "docker.io/library/golang@sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd",
+      "indexDigest": "sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd",
+      "platforms": {
+        "linux/amd64": "sha256:0d327c83532d3cdeeeebab56ce85962bf09cb89545355b10207c7771b0c3713f",
+        "linux/arm64": "sha256:b1a0cc29a7e13e0595e21087eeb930dc494976b18ba68279bf52c665f3170aa0"
+      },
+      "reason": "Immutable bootstrap image used to auto-select the go.mod toolchain until the Go 1.26.6 official image is published."
+    },
+    {
+      "name": "golangci-lint",
+      "role": "toolchain",
+      "source": "docker.io/golangci/golangci-lint:v2.12.2",
+      "reference": "docker.io/golangci/golangci-lint@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240",
+      "indexDigest": "sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240",
+      "platforms": {
+        "linux/amd64": "sha256:6ffe652d2215f590fcf6c6edcda8959c7a765a09378c200d31e098f7516f16c9",
+        "linux/arm64": "sha256:d752ab437f65208cefc8970886c6a430ce21b1561b352f029411797913f511bd"
+      },
+      "reason": "Pinned lint runner matching the V1 tool policy with native AMD64 and ARM64 manifests."
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/images-lock.schema.json",
+  "title": "ChronicleGate image lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "resolvedAt", "images"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schemaVersion": {"const": "chronicle.dev/images-lock/v1alpha1"},
+    "resolvedAt": {"type": "string", "format": "date"},
+    "images": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/image"}
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "source", "reference", "indexDigest", "platforms", "reason"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "role": {"enum": ["runtime", "toolchain"]},
+        "source": {"type": "string", "minLength": 1},
+        "reference": {"type": "string", "pattern": "^[^@]+@sha256:[0-9a-f]{64}$"},
+        "indexDigest": {"$ref": "#/$defs/digest"},
+        "platforms": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["linux/amd64", "linux/arm64"],
+          "properties": {
+            "linux/amd64": {"$ref": "#/$defs/digest"},
+            "linux/arm64": {"$ref": "#/$defs/digest"}
+          }
+        },
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

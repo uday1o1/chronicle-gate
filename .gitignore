@@ -1,0 +1,9 @@
+/bin/
+/.cache/
+/coverage/
+/dist/
+/run/
+*.coverprofile
+*.out
+*.test
+.DS_Store

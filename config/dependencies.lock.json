@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "chronicle.dev/dependencies-lock/v1alpha1",
+  "reviewedAt": "2026-08-13",
+  "sources": {
+    "goVersions": "https://go.dev/dl/?mode=json",
+    "goModules": "https://proxy.golang.org",
+    "vulnerabilities": "https://api.osv.dev/v1/query"
+  },
+  "dependencies": [
+    {"name": "Go", "version": "1.26.6", "kind": "toolchain", "advisories": []},
+    {"name": "github.com/spf13/cobra", "version": "1.10.2", "kind": "module", "advisories": []},
+    {"name": "github.com/testcontainers/testcontainers-go", "version": "0.44.0", "kind": "module", "advisories": []},
+    {"name": "github.com/twmb/franz-go", "version": "1.21.6", "kind": "module", "advisories": []},
+    {"name": "github.com/jackc/pgx/v5", "version": "5.10.0", "kind": "module", "advisories": []},
+    {"name": "go.opentelemetry.io/otel", "version": "1.45.0", "kind": "module", "advisories": []},
+    {"name": "github.com/santhosh-tekuri/jsonschema/v6", "version": "6.0.3", "kind": "module", "advisories": []},
+    {"name": "github.com/golangci/golangci-lint/v2", "version": "2.12.2", "kind": "tool", "advisories": []},
+    {"name": "golang.org/x/vuln", "version": "1.7.0", "kind": "tool", "advisories": []}
+  ]
+}
