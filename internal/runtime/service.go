@@ -31,6 +31,7 @@ type ServiceRuntime struct {
 	ImageID         string
 	ClientID        string
 	healthSpec      spec.Health
+	expectedPorts   []int
 	secretPaths     []string
 	secretDirectory string
 }
@@ -148,18 +149,38 @@ func StartService(ctx context.Context, config ServiceConfig) (*ServiceRuntime, e
 		cleanupErr := cleanupFailedService(config.RunID, config.AttemptID, config.Service.Name)
 		return nil, errors.Join(fmt.Errorf("start target service %q: %w", config.Service.Name, err), cleanupErr)
 	}
-	runtime := &ServiceRuntime{Container: serviceContainer, ClientID: clientID, healthSpec: config.Service.Health, secretPaths: secretPaths, secretDirectory: config.SecretDirectory}
+	expectedPorts := make([]int, 0, len(config.ExposedPorts)+1)
+	expectedPorts = append(expectedPorts, config.Service.Health.Port)
+	for _, exposed := range config.ExposedPorts {
+		if !slices.Contains(expectedPorts, exposed) {
+			expectedPorts = append(expectedPorts, exposed)
+		}
+	}
+	runtime := &ServiceRuntime{
+		Container: serviceContainer, ClientID: clientID, healthSpec: config.Service.Health,
+		expectedPorts: expectedPorts, secretPaths: secretPaths, secretDirectory: config.SecretDirectory,
+	}
 	inspect, err := serviceContainer.Inspect(ctx)
 	if err != nil {
-		_ = runtime.Terminate(context.Background())
-		return nil, fmt.Errorf("inspect target service: %w", err)
+		return nil, failStartedService(runtime, fmt.Errorf("inspect target service: %w", err))
 	}
 	runtime.ImageID = inspect.Image
 	if config.Service.Image != runtime.ImageID && len(config.Service.Image) == len("sha256:")+64 {
-		_ = runtime.Terminate(context.Background())
-		return nil, fmt.Errorf("local target image identity mismatch: authored %s, executed %s", config.Service.Image, runtime.ImageID)
+		return nil, failStartedService(runtime, fmt.Errorf("local target image identity mismatch: authored %s, executed %s", config.Service.Image, runtime.ImageID))
+	}
+	if err := runtime.AssertHardened(ctx, expectedPorts...); err != nil {
+		return nil, failStartedService(runtime, fmt.Errorf("verify target service hardening: %w", err))
 	}
 	return runtime, nil
+}
+
+func failStartedService(service *ServiceRuntime, startErr error) error {
+	cleanupContext, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if cleanupErr := service.Terminate(cleanupContext); cleanupErr != nil {
+		return errors.Join(startErr, &CleanupError{Err: cleanupErr})
+	}
+	return startErr
 }
 
 func cleanupFailedService(runID, attemptID, serviceName string) error {
@@ -298,6 +319,9 @@ func (service *ServiceRuntime) Start(ctx context.Context) error {
 	}
 	if err := service.waitForRestartHealth(ctx); err != nil {
 		return fmt.Errorf("wait for restarted target service: %w", err)
+	}
+	if err := service.AssertHardened(ctx, service.expectedPorts...); err != nil {
+		return fmt.Errorf("verify restarted target service hardening: %w", err)
 	}
 	return nil
 }

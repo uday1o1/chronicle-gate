@@ -408,6 +408,13 @@ func (manager *Manager) DropAttempt(ctx context.Context, name string) error {
 	if _, err := admin.Exec(ctx, "DROP DATABASE IF EXISTS "+name); err != nil {
 		return fmt.Errorf("drop attempt database %q: %w", name, err)
 	}
+	var exists bool
+	if err := admin.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)", name).Scan(&exists); err != nil {
+		return fmt.Errorf("verify attempt database %q deletion: %w", name, err)
+	}
+	if exists {
+		return fmt.Errorf("attempt database %q still exists after deletion", name)
+	}
 	return nil
 }
 

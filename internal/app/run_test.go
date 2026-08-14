@@ -58,3 +58,22 @@ func TestRunCLIMapsInterruptedState(t *testing.T) {
 		t.Fatalf("interrupted run exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }
+
+func TestRunCLIPreservesInfrastructureExitAfterCancellation(t *testing.T) {
+	repository := filepath.Join("..", "..")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Execute(ctx, []string{
+		"run", "--scenario", filepath.Join(repository, "examples/order-lifecycle/scenarios/r1-offset-rewind.yaml"),
+		"--baseline", filepath.Join(repository, "examples/order-lifecycle/targets/baseline.yaml"),
+		"--candidate", filepath.Join(repository, "examples/order-lifecycle/targets/candidate.yaml"),
+		"--out", filepath.Join(t.TempDir(), "run"), "--json",
+	}, &stdout, &stderr, Dependencies{Run: func(context.Context, engine.Config) engine.Report {
+		return engine.Report{APIVersion: "chronicle.dev/v1alpha1", Kind: "Result", RunID: "cleanup-failed", State: "INFRASTRUCTURE_ERROR", Classification: "INFRASTRUCTURE_ERROR", Error: "cleanup failed"}
+	}})
+	if code != ExitInfrastructure {
+		t.Fatalf("canceled cleanup failure exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}

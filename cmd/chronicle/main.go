@@ -11,11 +11,11 @@ import (
 
 func main() {
 	context, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	go func() {
+		<-context.Done()
+		stop()
+	}()
 
 	code := app.Execute(context, os.Args[1:], os.Stdout, os.Stderr, app.Dependencies{})
-	if context.Err() != nil && code != app.ExitSuccess {
-		code = app.ExitInterrupted
-	}
 	os.Exit(int(code))
 }

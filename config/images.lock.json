@@ -13,6 +13,10 @@
         "linux/amd64": "sha256:34f9fba9241bf45a12d3a7763da50be1e3d57c722d72a895eb619e140a1b9768",
         "linux/arm64": "sha256:27015025f219066323380aed804f9e30befd83235a2bb43eba6c75c5f2071113"
       },
+      "hardening": {
+        "capDrop": ["ALL"],
+        "capAdd": {"linux/amd64": ["DAC_OVERRIDE"], "linux/arm64": ["DAC_OVERRIDE"]}
+      },
       "reason": "Current Redpanda 26.2.1 release with native AMD64 and ARM64 manifests."
     },
     {
@@ -24,6 +28,13 @@
       "platforms": {
         "linux/amd64": "sha256:b6a16ed0eb96e2c362811f7eeb951eac8b459e7b40be4149ea5444aa7c65569b",
         "linux/arm64": "sha256:122c9942437efcbbb8d595fc578dee7d26ee1543c2a8634d183adfa4a1e55b4d"
+      },
+      "hardening": {
+        "capDrop": ["ALL"],
+        "capAdd": {
+          "linux/amd64": ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"],
+          "linux/arm64": ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+        }
       },
       "reason": "PostgreSQL 18.4 security release on the Alpine variant with native AMD64 and ARM64 manifests."
     },

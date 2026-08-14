@@ -12,7 +12,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/uday1o1/chronicle-gate/internal/artifact"
 	"github.com/uday1o1/chronicle-gate/internal/bundle"
@@ -482,6 +484,115 @@ func TestFailureCleanupUsesExactRunScope(t *testing.T) {
 	assertNoRunResources(t, report.RunID)
 }
 
+func TestAbruptCLIInterruptionCleansExactRunScope(t *testing.T) {
+	repository, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for iteration := 0; iteration < 2; iteration++ {
+		root, err := os.MkdirTemp(filepath.Join(repository, "run"), "integration-interrupt-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		output := filepath.Join(root, "artifacts")
+		command := exec.Command(filepath.Join(repository, "bin/chronicle"),
+			"run",
+			"--scenario", filepath.Join(repository, "examples/order-lifecycle/scenarios/r1-offset-rewind.yaml"),
+			"--baseline", filepath.Join(repository, "examples/order-lifecycle/targets/generated/baseline.yaml"),
+			"--candidate", filepath.Join(repository, "examples/order-lifecycle/targets/generated/candidate.yaml"),
+			"--out", output,
+			"--development-local-images",
+			"--no-minimize",
+			"--json",
+		)
+		command.Dir = repository
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		command.Stdout = &stdout
+		command.Stderr = &stderr
+		if err := command.Start(); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- command.Wait() }()
+		runID := waitForRunEnvironment(t, output, command.Process, done, &stdout, &stderr)
+		if err := command.Process.Signal(os.Interrupt); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case waitErr := <-done:
+			var exitError *exec.ExitError
+			if !errors.As(waitErr, &exitError) || exitError.ExitCode() != 130 {
+				t.Fatalf("interrupted CLI exit error = %v\nstdout=%s\nstderr=%s", waitErr, stdout.String(), stderr.String())
+			}
+		case <-time.After(60 * time.Second):
+			_ = command.Process.Signal(syscall.SIGKILL)
+			t.Fatal("interrupted CLI did not exit within 60 seconds")
+		}
+		var report engine.Report
+		if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+			t.Fatalf("decode interrupted report: %v\n%s", err, stdout.String())
+		}
+		if report.RunID != runID || report.State != "INTERRUPTED" || report.Classification != "UNRESOLVED" {
+			t.Fatalf("interrupted report = %#v", report)
+		}
+		if report.Error == "" {
+			t.Fatal("interrupted report has no cause")
+		}
+		events, truncated, err := runlog.Read(filepath.Join(output, "events.ndjson"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if runlog.IsComplete(events, truncated) {
+			t.Fatal("interrupted journal incorrectly claims COMPLETE")
+		}
+		state, terminal := runlog.FinalState(events, truncated)
+		if !terminal || state != "INTERRUPTED" {
+			t.Fatalf("interrupted journal terminal=%t state=%s", terminal, state)
+		}
+		assertNoRunResources(t, runID)
+		for _, volume := range report.Environment.OwnedVolumes {
+			if output, err := exec.Command("docker", "volume", "inspect", volume).CombinedOutput(); err == nil {
+				t.Fatalf("owned volume %s remains after interruption: %s", volume, output)
+			}
+		}
+		if err := os.RemoveAll(root); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func waitForRunEnvironment(t *testing.T, output string, process *os.Process, done <-chan error, stdout, stderr *bytes.Buffer) string {
+	t.Helper()
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) {
+		document, err := os.ReadFile(filepath.Join(output, "run.json"))
+		if err == nil {
+			var metadata struct {
+				RunID string `json:"runId"`
+			}
+			if json.Unmarshal(document, &metadata) == nil && metadata.RunID != "" {
+				listed, listErr := exec.Command("docker", "ps", "-a", "--filter", "label=dev.chronicle.run="+metadata.RunID, "--format", "{{.ID}}").CombinedOutput()
+				if listErr != nil {
+					t.Fatalf("list active run containers: %v: %s", listErr, listed)
+				}
+				if len(strings.Fields(string(listed))) >= 2 {
+					return metadata.RunID
+				}
+			}
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("CLI exited before the interruption point: %v\nstdout=%s\nstderr=%s", err, stdout.String(), stderr.String())
+		default:
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	_ = process.Signal(syscall.SIGKILL)
+	t.Fatal("CLI did not start the broker and database within 90 seconds")
+	return ""
+}
+
 func runCLI(t *testing.T, repository, output, baseline, candidate string) (engine.Report, string, string, int) {
 	return runCLIWithScenario(t, repository, output, filepath.Join(repository, "examples/order-lifecycle/scenarios/r1-offset-rewind.yaml"), baseline, candidate, true)
 }
@@ -551,6 +662,7 @@ func assertNoRunResources(t *testing.T, runID string) {
 	for _, arguments := range [][]string{
 		{"ps", "-a", "--filter", "label=dev.chronicle.run=" + runID, "--format", "{{.ID}}"},
 		{"network", "ls", "--filter", "label=dev.chronicle.run=" + runID, "--format", "{{.ID}}"},
+		{"volume", "ls", "--filter", "label=dev.chronicle.run=" + runID, "--format", "{{.Name}}"},
 	} {
 		output, err := exec.Command("docker", arguments...).CombinedOutput()
 		if err != nil {

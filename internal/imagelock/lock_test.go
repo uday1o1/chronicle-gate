@@ -20,6 +20,7 @@ func validLockJSON() string {
     "reference":"example.invalid/image@` + testDigestA + `",
     "indexDigest":"` + testDigestA + `",
     "platforms":{"linux/amd64":"` + testDigestB + `","linux/arm64":"` + testDigestC + `"},
+    "hardening":{"capDrop":["ALL"],"capAdd":{"linux/amd64":[],"linux/arm64":[]}},
     "reason":"test"
   }]
 }`

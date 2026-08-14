@@ -3,7 +3,6 @@ package bundle
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,8 +23,12 @@ import (
 )
 
 const (
-	maxBundleFiles = 1000
-	maxBundleBytes = int64(1 << 30)
+	maxBundleFiles           = 1000
+	maxBundleBytes           = int64(1 << 30)
+	maxBundleEntryBytes      = int64(512 << 20)
+	maxCreationRetainedBytes = int64(256 << 20)
+	maxCompressionRatio      = int64(200)
+	compressionRatioFloor    = int64(1 << 20)
 )
 
 type CreateConfig struct {
@@ -38,6 +41,7 @@ type CreateConfig struct {
 	EnvironmentLock   string
 	ExpectedSignature string
 	SecretValues      []string
+	saveImage         func(context.Context, string, int64) ([]byte, error)
 }
 
 type Archive struct {
@@ -49,14 +53,46 @@ type Archive struct {
 }
 
 func Create(ctx context.Context, config CreateConfig) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(config.Path); err == nil {
+		return fmt.Errorf("reproduction bundle destination already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect reproduction bundle destination: %w", err)
+	}
 	entries := map[string][]byte{}
+	casePaths := map[string]string{}
+	var retained int64
+	addEntry := func(name string, document []byte) error {
+		name, err := safePath(name)
+		if err != nil {
+			return fmt.Errorf("unsafe bundle creation entry: %w", err)
+		}
+		if _, exists := entries[name]; exists {
+			return fmt.Errorf("duplicate bundle creation entry %q", name)
+		}
+		folded := strings.ToLower(name)
+		if prior, exists := casePaths[folded]; exists {
+			return fmt.Errorf("case-colliding bundle creation entries %q and %q", prior, name)
+		}
+		if len(entries) >= maxBundleFiles || int64(len(document)) > maxBundleEntryBytes || retained > maxCreationRetainedBytes-int64(len(document)) {
+			return fmt.Errorf("bundle creation retained-input limit exceeded")
+		}
+		if err := artifact.ValidatePublic(document, config.SecretValues); err != nil {
+			return err
+		}
+		entries[name] = document
+		casePaths[folded] = name
+		retained += int64(len(document))
+		return nil
+	}
 	addJSON := func(name string, value any) error {
 		document, err := json.MarshalIndent(value, "", "  ")
 		if err != nil {
 			return err
 		}
-		entries[name] = append(document, '\n')
-		return nil
+		return addEntry(name, append(document, '\n'))
 	}
 	if err := addJSON("scenario/scenario.json", config.Scenario); err != nil {
 		return err
@@ -67,12 +103,14 @@ func Create(ctx context.Context, config CreateConfig) error {
 	if err := addJSON("targets/candidate.json", config.Candidate); err != nil {
 		return err
 	}
-	lock, err := os.ReadFile(config.EnvironmentLock)
+	lock, err := readBoundedFile(config.EnvironmentLock, maxCreationRetainedBytes-retained)
 	if err != nil {
 		return fmt.Errorf("read environment lock for bundle: %w", err)
 	}
-	entries["environment.lock.json"] = lock
-	if err := addScenarioClosure(entries, config.ScenarioRoot); err != nil {
+	if err := addEntry("environment.lock.json", lock); err != nil {
+		return err
+	}
+	if err := addScenarioClosure(config.ScenarioRoot, maxCreationRetainedBytes-retained, addEntry); err != nil {
 		return err
 	}
 
@@ -83,35 +121,49 @@ func Create(ctx context.Context, config CreateConfig) error {
 		Files: []spec.BundleFile{}, Safety: spec.BundleSafety{MaxFiles: maxBundleFiles, MaxExpandedBytes: maxBundleBytes, SymlinksAllowed: false},
 		ExpectedSignature: config.ExpectedSignature,
 	}
-	if err := artifact.ValidatePublic(mustJSON(entries), config.SecretValues); err != nil {
-		return err
-	}
-
-	docker, err := client.New(client.FromEnv)
-	if err != nil {
-		return fmt.Errorf("create Docker client for bundle: %w", err)
-	}
-	defer func() { _ = docker.Close() }()
+	var docker *client.Client
+	defer func() {
+		if docker != nil {
+			_ = docker.Close()
+		}
+	}()
 	seenImages := map[string]string{}
 	for _, target := range []struct {
 		name  string
 		value spec.Target
 	}{{"baseline", config.Baseline}, {"candidate", config.Candidate}} {
 		for _, service := range target.value.Spec.Services {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			image := spec.BundleImage{Name: target.name + "/" + service.Name, Reference: service.Image, Portable: !imagelock.IsLocalImageID(service.Image)}
 			if !image.Portable {
 				manifest.Nonportable = true
 				archivePath, exists := seenImages[service.Image]
 				if !exists {
 					archivePath = "images/" + strings.TrimPrefix(service.Image, "sha256:") + ".tar"
-					document, saveErr := saveCanonicalImage(ctx, docker, service.Image)
+					saver := config.saveImage
+					if saver == nil {
+						if docker == nil {
+							docker, err = client.New(client.FromEnv)
+							if err != nil {
+								return fmt.Errorf("create Docker client for bundle: %w", err)
+							}
+						}
+						saver = func(saveContext context.Context, reference string, limit int64) ([]byte, error) {
+							return saveCanonicalImage(saveContext, docker, reference, limit)
+						}
+					}
+					document, saveErr := saver(ctx, service.Image, maxCreationRetainedBytes-retained)
 					if saveErr != nil {
 						return saveErr
 					}
 					if err := verifyImageArchive(document, service.Image); err != nil {
 						return fmt.Errorf("verify canonical image archive: %w", err)
 					}
-					entries[archivePath] = document
+					if err := addEntry(archivePath, document); err != nil {
+						return err
+					}
 					seenImages[service.Image] = archivePath
 				}
 				image.Archive = archivePath
@@ -135,8 +187,10 @@ func Create(ctx context.Context, config CreateConfig) error {
 	if err := artifact.ValidatePublic(manifestDocument, config.SecretValues); err != nil {
 		return err
 	}
-	entries["bundle.json"] = manifestDocument
-	return writeZIP(config.Path, entries)
+	if err := addEntry("bundle.json", manifestDocument); err != nil {
+		return err
+	}
+	return writeZIPContext(ctx, config.Path, entries)
 }
 
 func Open(path string) (*Archive, error) {
@@ -177,33 +231,11 @@ func Open(path string) (*Archive, error) {
 }
 
 func (archive *Archive) verify() error {
-	if len(archive.reader.File) == 0 || len(archive.reader.File) > maxBundleFiles+1 {
-		return fmt.Errorf("bundle file-count limit exceeded")
+	entries, err := validatedZIPEntries(archive.reader.File)
+	if err != nil {
+		return err
 	}
-	casePaths := map[string]string{}
-	var expanded int64
-	for _, file := range archive.reader.File {
-		name, err := safePath(file.Name)
-		if err != nil {
-			return fmt.Errorf("unsafe bundle entry: %w", err)
-		}
-		if file.Flags&0x1 != 0 || !file.FileInfo().Mode().IsRegular() {
-			return fmt.Errorf("bundle entry %q is encrypted or not a regular file", name)
-		}
-		if _, exists := archive.entries[name]; exists {
-			return fmt.Errorf("duplicate bundle entry %q", name)
-		}
-		folded := strings.ToLower(name)
-		if prior, exists := casePaths[folded]; exists {
-			return fmt.Errorf("case-colliding bundle entries %q and %q", prior, name)
-		}
-		casePaths[folded] = name
-		if file.UncompressedSize64 > uint64(maxBundleBytes) || expanded+int64(file.UncompressedSize64) > maxBundleBytes {
-			return fmt.Errorf("bundle expanded-size limit exceeded")
-		}
-		expanded += int64(file.UncompressedSize64)
-		archive.entries[name] = file
-	}
+	archive.entries = entries
 	manifestDocument, err := archive.readEntry("bundle.json", spec.MaxContractBytes)
 	if err != nil {
 		return err
@@ -266,6 +298,9 @@ func (archive *Archive) verify() error {
 			return err
 		}
 		digest := sha256.Sum256(document)
+		if int64(len(document)) != record.Size || uint64(len(document)) != file.UncompressedSize64 {
+			return fmt.Errorf("bundle file %q decompressed size mismatch", path)
+		}
 		if hex.EncodeToString(digest[:]) != record.SHA256 {
 			return fmt.Errorf("bundle file %q checksum mismatch", path)
 		}
@@ -312,6 +347,41 @@ func (archive *Archive) verify() error {
 	return nil
 }
 
+func validatedZIPEntries(files []*zip.File) (map[string]*zip.File, error) {
+	if len(files) == 0 || len(files) > maxBundleFiles+1 {
+		return nil, fmt.Errorf("bundle file-count limit exceeded")
+	}
+	entries := make(map[string]*zip.File, len(files))
+	casePaths := map[string]string{}
+	var expanded int64
+	for _, file := range files {
+		name, err := safePath(file.Name)
+		if err != nil {
+			return nil, fmt.Errorf("unsafe bundle entry: %w", err)
+		}
+		if file.Flags&0x1 != 0 || !file.FileInfo().Mode().IsRegular() {
+			return nil, fmt.Errorf("bundle entry %q is encrypted or not a regular file", name)
+		}
+		if _, exists := entries[name]; exists {
+			return nil, fmt.Errorf("duplicate bundle entry %q", name)
+		}
+		folded := strings.ToLower(name)
+		if prior, exists := casePaths[folded]; exists {
+			return nil, fmt.Errorf("case-colliding bundle entries %q and %q", prior, name)
+		}
+		casePaths[folded] = name
+		if file.UncompressedSize64 > uint64(maxBundleEntryBytes) || expanded > maxBundleBytes-int64(file.UncompressedSize64) {
+			return nil, fmt.Errorf("bundle expanded-size limit exceeded")
+		}
+		if compressionRatioExceeded(int64(file.UncompressedSize64), int64(file.CompressedSize64)) {
+			return nil, fmt.Errorf("bundle entry %q exceeds compression-ratio limit", name)
+		}
+		expanded += int64(file.UncompressedSize64)
+		entries[name] = file
+	}
+	return entries, nil
+}
+
 func (archive *Archive) Extract(destination string) error {
 	if info, err := os.Lstat(destination); err == nil || !errors.Is(err, os.ErrNotExist) {
 		if err == nil && info.Mode()&os.ModeSymlink != 0 {
@@ -343,12 +413,15 @@ func (archive *Archive) Extract(destination string) error {
 			_ = input.Close()
 			return err
 		}
-		_, copyErr := io.Copy(output, io.LimitReader(input, record.Size+1))
+		written, copyErr := io.Copy(output, io.LimitReader(input, record.Size+1))
 		syncErr := output.Sync()
 		closeOutputErr := output.Close()
 		closeInputErr := input.Close()
 		if err := errors.Join(copyErr, syncErr, closeOutputErr, closeInputErr); err != nil {
 			return err
+		}
+		if written != record.Size {
+			return fmt.Errorf("bundle entry %q extracted %d bytes, want %d", record.Path, written, record.Size)
 		}
 	}
 	return nil
@@ -421,10 +494,14 @@ func (archive *Archive) readEntry(name string, limit int64) ([]byte, error) {
 	if int64(len(document)) > limit {
 		return nil, fmt.Errorf("bundle entry %q exceeds limit", name)
 	}
+	if uint64(len(document)) != file.UncompressedSize64 {
+		return nil, fmt.Errorf("bundle entry %q decompressed size differs from its ZIP header", name)
+	}
 	return document, nil
 }
 
-func addScenarioClosure(entries map[string][]byte, root string) error {
+func addScenarioClosure(root string, budget int64, add func(string, []byte) error) error {
+	var retained int64
 	return filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -442,27 +519,65 @@ func addScenarioClosure(entries map[string][]byte, root string) error {
 		if err != nil {
 			return err
 		}
-		if relative == "r1-offset-rewind.yaml" || relative == "r1-offset-rewind-noisy.yaml" {
+		if relative == "scenario.json" || relative == "r1-offset-rewind.yaml" || relative == "r1-offset-rewind-noisy.yaml" {
 			return nil
 		}
-		document, err := os.ReadFile(path)
+		remaining := budget - retained
+		document, err := readBoundedFile(path, remaining)
 		if err != nil {
 			return err
 		}
-		entries["scenario/"+filepath.ToSlash(relative)] = document
+		if err := add("scenario/"+filepath.ToSlash(relative), document); err != nil {
+			return err
+		}
+		retained += int64(len(document))
 		return nil
 	})
 }
 
 func writeZIP(path string, entries map[string][]byte) error {
+	return writeZIPContext(context.Background(), path, entries)
+}
+
+func writeZIPContext(ctx context.Context, destination string, entries map[string][]byte) error {
+	return writeZIPContextWithHook(ctx, destination, entries, nil)
+}
+
+func writeZIPContextWithHook(ctx context.Context, destination string, entries map[string][]byte, afterPublish func()) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(destination); err == nil {
+		return fmt.Errorf("reproduction bundle destination already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect reproduction bundle destination: %w", err)
+	}
 	names := make([]string, 0, len(entries))
 	for name := range entries {
+		if _, err := safePath(name); err != nil {
+			return err
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	var output bytes.Buffer
-	writer := zip.NewWriter(&output)
+	directory := filepath.Dir(destination)
+	temporary, err := os.CreateTemp(directory, "."+filepath.Base(destination)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create private bundle temporary file: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer func() { _ = os.Remove(temporaryPath) }()
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	writer := zip.NewWriter(temporary)
 	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			_ = writer.Close()
+			_ = temporary.Close()
+			return err
+		}
 		header := &zip.FileHeader{Name: name, Method: zip.Deflate}
 		header.SetMode(0o600)
 		header.Modified = time.Unix(0, 0).UTC()
@@ -475,16 +590,104 @@ func writeZIP(path string, entries map[string][]byte) error {
 		}
 	}
 	if err := writer.Close(); err != nil {
+		_ = temporary.Close()
 		return err
 	}
-	return artifact.WriteFile(path, output.Bytes())
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	identity, err := temporary.Stat()
+	if err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	reader, err := zip.NewReader(temporary, identity.Size())
+	if err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("verify created reproduction ZIP: %w", err)
+	}
+	if _, err := validatedZIPEntries(reader.File); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("verify created reproduction ZIP: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := os.Link(temporaryPath, destination); err != nil {
+		return fmt.Errorf("publish reproduction bundle without overwrite: %w", err)
+	}
+	if afterPublish != nil {
+		afterPublish()
+	}
+	if err := syncDirectory(directory); err != nil {
+		return cleanupPublishedBundle(destination, temporaryPath, identity, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return cleanupPublishedBundle(destination, temporaryPath, identity, err)
+	}
+	if err := os.Remove(temporaryPath); err != nil {
+		return fmt.Errorf("remove published bundle temporary link: %w", err)
+	}
+	if err := syncDirectory(directory); err != nil {
+		return err
+	}
+	return nil
 }
 
-func mustJSON(entries map[string][]byte) []byte {
-	value := make(map[string]string, len(entries))
-	for name, document := range entries {
-		value[name] = string(document)
+func cleanupPublishedBundle(destination, temporary string, identity os.FileInfo, cause error) error {
+	destinationInfo, statErr := os.Lstat(destination)
+	if statErr != nil {
+		return errors.Join(cause, fmt.Errorf("inspect canceled bundle publication: %w", statErr))
 	}
-	document, _ := json.Marshal(value)
-	return document
+	if !os.SameFile(identity, destinationInfo) {
+		return errors.Join(cause, fmt.Errorf("canceled bundle destination identity changed; refusing deletion"))
+	}
+	removeDestinationErr := os.Remove(destination)
+	removeTemporaryErr := os.Remove(temporary)
+	syncErr := syncDirectory(filepath.Dir(destination))
+	return errors.Join(cause, removeDestinationErr, removeTemporaryErr, syncErr)
+}
+
+func syncDirectory(directory string) error {
+	file, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = file.Close() }()
+	return file.Sync()
+}
+
+func readBoundedFile(name string, limit int64) ([]byte, error) {
+	if limit < 0 {
+		return nil, fmt.Errorf("bundle creation retained-input limit exceeded")
+	}
+	file, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, fmt.Errorf("bundle input %q is not a bounded regular file", name)
+	}
+	document, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(document)) > limit {
+		return nil, fmt.Errorf("bundle input %q exceeds retained-input limit", name)
+	}
+	return document, nil
+
+}
+
+func compressionRatioExceeded(expanded, compressed int64) bool {
+	return expanded >= compressionRatioFloor && (compressed <= 0 || expanded > compressed*maxCompressionRatio)
 }

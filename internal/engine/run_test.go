@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	cruntime "github.com/uday1o1/chronicle-gate/internal/runtime"
 	"github.com/uday1o1/chronicle-gate/internal/spec"
@@ -45,6 +46,43 @@ func TestPartialEnvironmentCleanupFailureOverridesCancellation(t *testing.T) {
 	err := errors.Join(context.Canceled, &cruntime.CleanupError{Err: errors.New("network removal failed")})
 	if classification := classifyOperationalError(err); classification != "INFRASTRUCTURE_ERROR" {
 		t.Fatalf("classification = %q", classification)
+	}
+}
+
+func TestTerminalStatePreservesInterruptionAndCleanupPrecedence(t *testing.T) {
+	t.Parallel()
+	if state := terminalState(Report{State: "INTERRUPTED", Classification: "SEMANTIC_REGRESSION"}); state != "INTERRUPTED" {
+		t.Fatalf("interrupted regression terminal state = %q", state)
+	}
+	if state := terminalState(Report{State: "INTERRUPTED", Classification: "INFRASTRUCTURE_ERROR"}); state != "INFRASTRUCTURE_ERROR" {
+		t.Fatalf("cleanup failure terminal state = %q", state)
+	}
+	if state := terminalState(Report{State: "COMPARING", Classification: "SEMANTIC_REGRESSION"}); state != "COMPLETE" {
+		t.Fatalf("verified regression terminal state = %q", state)
+	}
+	if state := terminalState(Report{State: "CLEANING", Classification: "FLAKY"}); state != "FLAKY" {
+		t.Fatalf("flaky terminal state = %q", state)
+	}
+}
+
+func TestRunContextKeepsTheFirstCancellationCause(t *testing.T) {
+	t.Parallel()
+	parent, cancelParent := context.WithCancel(context.Background())
+	deadlineFirst, cancelDeadline := newRunContext(parent, time.Nanosecond)
+	defer cancelDeadline()
+	<-deadlineFirst.Done()
+	cancelParent()
+	if !errors.Is(context.Cause(deadlineFirst), context.DeadlineExceeded) {
+		t.Fatalf("deadline-first cause = %v", context.Cause(deadlineFirst))
+	}
+
+	parent, cancelParent = context.WithCancel(context.Background())
+	signalFirst, cancelDeadline := newRunContext(parent, time.Hour)
+	defer cancelDeadline()
+	cancelParent()
+	<-signalFirst.Done()
+	if !errors.Is(context.Cause(signalFirst), context.Canceled) {
+		t.Fatalf("signal-first cause = %v", context.Cause(signalFirst))
 	}
 }
 

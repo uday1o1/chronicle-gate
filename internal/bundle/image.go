@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/moby/moby/client"
 )
@@ -54,12 +56,19 @@ type imageConfig struct {
 	} `json:"rootfs"`
 }
 
-func saveCanonicalImage(ctx context.Context, docker *client.Client, reference string) ([]byte, error) {
+func saveCanonicalImage(ctx context.Context, docker *client.Client, reference string, remainingBudget int64) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	limit := min(maxImageArchiveBytes, remainingBudget)
+	if limit <= 0 {
+		return nil, fmt.Errorf("saved image %s exceeds bundle creation retained-input limit", reference)
+	}
 	stream, err := docker.ImageSave(ctx, []string{reference})
 	if err != nil {
 		return nil, fmt.Errorf("save image %s: %w", reference, err)
 	}
-	document, readErr := io.ReadAll(io.LimitReader(stream, maxImageArchiveBytes+1))
+	document, readErr := io.ReadAll(io.LimitReader(stream, limit+1))
 	closeErr := stream.Close()
 	if readErr != nil {
 		return nil, fmt.Errorf("read saved image %s: %w", reference, readErr)
@@ -67,8 +76,11 @@ func saveCanonicalImage(ctx context.Context, docker *client.Client, reference st
 	if closeErr != nil {
 		return nil, fmt.Errorf("close saved image %s: %w", reference, closeErr)
 	}
-	if len(document) > maxImageArchiveBytes {
-		return nil, fmt.Errorf("saved image %s exceeds archive limit", reference)
+	if int64(len(document)) > limit {
+		return nil, fmt.Errorf("saved image %s exceeds bundle creation retained-input limit", reference)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	entries, err := readImageTar(document)
 	if err != nil {
@@ -182,14 +194,20 @@ func validateImageEntries(entries map[string][]byte, reference string, allowTags
 		return fmt.Errorf("image config rootfs is invalid: %w", err)
 	}
 	layerPaths := make([]string, 0, len(manifest.Layers))
+	var totalExpanded int64
 	for index, layer := range manifest.Layers {
 		layerPath, err := validateDescriptor(entries, layer)
 		if err != nil {
 			return fmt.Errorf("image layer %d: %w", index, err)
 		}
-		if err := validateDiffID(entries[layerPath], layer.MediaType, config.RootFS.DiffIDs[index]); err != nil {
+		expanded, err := validateDiffID(entries[layerPath], layer.MediaType, config.RootFS.DiffIDs[index])
+		if err != nil {
 			return fmt.Errorf("image layer %d: %w", index, err)
 		}
+		if totalExpanded > maxImageArchiveBytes-expanded {
+			return fmt.Errorf("image layers exceed aggregate expanded-size limit")
+		}
+		totalExpanded += expanded
 		referenced[layerPath] = struct{}{}
 		layerPaths = append(layerPaths, layerPath)
 	}
@@ -232,31 +250,38 @@ func validateDescriptor(entries map[string][]byte, value descriptor) (string, er
 	return path, nil
 }
 
-func validateDiffID(layer []byte, mediaType, expected string) error {
+func validateDiffID(layer []byte, mediaType, expected string) (int64, error) {
 	var reader io.Reader = bytes.NewReader(layer)
 	var closer io.Closer
 	if strings.Contains(mediaType, "gzip") {
 		gzipReader, err := gzip.NewReader(reader)
 		if err != nil {
-			return fmt.Errorf("open gzip layer: %w", err)
+			return 0, fmt.Errorf("open gzip layer: %w", err)
 		}
 		reader = gzipReader
 		closer = gzipReader
 	} else if strings.Contains(mediaType, "zstd") {
-		return fmt.Errorf("zstd layers are unsupported in development bundles")
+		return 0, fmt.Errorf("zstd layers are unsupported in development bundles")
 	}
 	hash := sha256.New()
-	if _, err := io.Copy(hash, io.LimitReader(reader, maxImageArchiveBytes+1)); err != nil {
-		return fmt.Errorf("hash expanded layer: %w", err)
+	expanded, err := io.Copy(hash, io.LimitReader(reader, maxImageArchiveBytes+1))
+	if err != nil {
+		return 0, fmt.Errorf("hash expanded layer: %w", err)
+	}
+	if expanded > maxImageArchiveBytes {
+		return 0, fmt.Errorf("expanded image layer exceeds %d bytes", maxImageArchiveBytes)
+	}
+	if compressionRatioExceeded(expanded, int64(len(layer))) {
+		return 0, fmt.Errorf("expanded image layer exceeds compression-ratio limit")
 	}
 	if closer != nil {
 		_ = closer.Close()
 	}
 	actual := "sha256:" + hex.EncodeToString(hash.Sum(nil))
 	if actual != expected {
-		return fmt.Errorf("diff ID mismatch: got %s want %s", actual, expected)
+		return 0, fmt.Errorf("diff ID mismatch: got %s want %s", actual, expected)
 	}
-	return nil
+	return expanded, nil
 }
 
 func writeImageTar(entries map[string][]byte) ([]byte, error) {
@@ -287,6 +312,9 @@ func strictJSON(document []byte, destination any) error {
 	if len(document) == 0 {
 		return fmt.Errorf("required JSON entry is absent")
 	}
+	if err := rejectDuplicateJSONKeys(document); err != nil {
+		return err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(document))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
@@ -312,10 +340,66 @@ func contentDigest(document []byte) string {
 }
 
 func safePath(name string) (string, error) {
-	if name == "" || strings.Contains(name, "\\") || strings.HasPrefix(name, "/") || path.Clean(name) != name || name == "." || strings.HasPrefix(name, "../") {
+	if name == "" || !utf8.ValidString(name) || strings.ContainsAny(name, "\\:") || strings.HasPrefix(name, "/") || path.Clean(name) != name || name == "." || strings.HasPrefix(name, "../") {
 		return "", fmt.Errorf("path %q is not normalized and relative", name)
 	}
+	for _, character := range name {
+		if unicode.IsControl(character) {
+			return "", fmt.Errorf("path %q contains a control character", name)
+		}
+	}
 	return name, nil
+}
+
+func rejectDuplicateJSONKeys(document []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(document))
+	type frame struct {
+		object    bool
+		expectKey bool
+		keys      map[string]struct{}
+	}
+	stack := []frame{}
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		switch typed := token.(type) {
+		case json.Delim:
+			switch typed {
+			case '{':
+				stack = append(stack, frame{object: true, expectKey: true, keys: map[string]struct{}{}})
+			case '[':
+				stack = append(stack, frame{})
+			case '}', ']':
+				if len(stack) == 0 {
+					return fmt.Errorf("JSON delimiter is unbalanced")
+				}
+				stack = stack[:len(stack)-1]
+				if len(stack) > 0 && stack[len(stack)-1].object {
+					stack[len(stack)-1].expectKey = true
+				}
+			}
+		case string:
+			if len(stack) > 0 && stack[len(stack)-1].object && stack[len(stack)-1].expectKey {
+				current := &stack[len(stack)-1]
+				if _, exists := current.keys[typed]; exists {
+					return fmt.Errorf("JSON object contains duplicate key %q", typed)
+				}
+				current.keys[typed] = struct{}{}
+				current.expectKey = false
+			} else if len(stack) > 0 && stack[len(stack)-1].object {
+				stack[len(stack)-1].expectKey = true
+			}
+		default:
+			if len(stack) > 0 && stack[len(stack)-1].object && !stack[len(stack)-1].expectKey {
+				stack[len(stack)-1].expectKey = true
+			}
+		}
+	}
 }
 
 func equalStrings(left, right []string) bool {

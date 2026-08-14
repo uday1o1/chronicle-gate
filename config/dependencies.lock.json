@@ -8,6 +8,7 @@
   },
   "dependencies": [
     {"name": "Go", "version": "1.26.6", "kind": "toolchain", "advisories": []},
+    {"name": "github.com/containerd/errdefs", "version": "1.0.0", "kind": "module", "advisories": []},
     {"name": "github.com/spf13/cobra", "version": "1.10.2", "kind": "module", "advisories": []},
     {"name": "github.com/testcontainers/testcontainers-go", "version": "0.44.0", "kind": "module", "advisories": []},
     {"name": "github.com/testcontainers/testcontainers-go/modules/postgres", "version": "0.44.0", "kind": "module", "advisories": []},
@@ -18,7 +19,7 @@
     {"name": "github.com/docker/go-connections", "version": "0.8.1", "kind": "indirect-module", "advisories": []},
     {"name": "github.com/moby/moby/api", "version": "1.55.0", "kind": "module", "advisories": []},
     {"name": "github.com/moby/moby/client", "version": "0.5.0", "kind": "module", "advisories": []},
-    {"name": "go.opentelemetry.io/otel", "version": "1.44.0", "kind": "module", "advisories": []},
+    {"name": "go.opentelemetry.io/otel", "version": "1.44.0", "kind": "indirect-module", "advisories": []},
     {"name": "golang.org/x/crypto", "version": "0.54.0", "kind": "indirect-module", "advisories": ["GO-2026-5932: openpgp is not imported or reachable"]},
     {"name": "github.com/santhosh-tekuri/jsonschema/v6", "version": "6.0.3", "kind": "module", "advisories": []},
     {"name": "go.yaml.in/yaml/v3", "version": "3.0.5", "kind": "module", "advisories": []},

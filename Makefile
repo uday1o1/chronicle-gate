@@ -42,7 +42,7 @@ GO_ENV := env GOTOOLCHAIN=auto
 GOFMT_CMD := gofmt
 endif
 
-.PHONY: all build build-cross clean fmt fmt-check lint reference-images test test-integration test-e2e fuzz-smoke vet verify toolchain tidy
+.PHONY: all build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint reference-images security-check test test-integration test-e2e test-race vet verify verify-common toolchain tidy
 
 all: build
 
@@ -102,12 +102,28 @@ test-integration: reference-images build
 test-e2e: test-integration
 
 fuzz-smoke: toolchain
-	$(GO_CMD) test -run '^$$' ./...
+	$(GO_CMD) test ./internal/spec -run '^$$' -fuzz '^FuzzScenarioContracts$$' -fuzztime=1s
+	$(GO_CMD) test ./internal/spec -run '^$$' -fuzz '^FuzzResultAndBundleContracts$$' -fuzztime=1s
+	$(GO_CMD) test ./internal/minimize -run '^$$' -fuzz '^FuzzReducerDependencyClosure$$' -fuzztime=1s
+	$(GO_CMD) test ./internal/observe -run '^$$' -fuzz '^FuzzObservationCanonicalization$$' -fuzztime=1s
+	$(GO_CMD) test ./internal/observe -run '^$$' -fuzz '^FuzzNormalizationIdempotence$$' -fuzztime=1s
+	$(GO_CMD) test ./internal/bundle -run '^$$' -fuzz '^FuzzArchiveSafety$$' -fuzztime=1s
+
+test-race: toolchain
+	$(GO_CMD) test -race -count=1 ./...
+
+security-check: toolchain
+	$(GO_CMD) run ./tools/security_check
+
+govulncheck: toolchain
+	$(GO_CMD) run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
 tidy: toolchain
 	$(GO_CMD) mod tidy
 
-verify: fmt-check lint test vet build build-cross
+verify-common: fmt-check test vet test-race security-check govulncheck fuzz-smoke build build-cross
+
+verify: verify-common lint test-integration
 
 clean:
 	@rm -f bin/chronicle dist/chronicle-darwin-arm64 dist/chronicle-linux-amd64 dist/chronicle-linux-arm64

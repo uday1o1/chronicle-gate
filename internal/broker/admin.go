@@ -2,10 +2,12 @@ package broker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -73,7 +75,26 @@ func (admin *Admin) DeleteTopic(ctx context.Context, topic string) error {
 	if response.Err != nil {
 		return fmt.Errorf("delete topic %q: %w", topic, response.Err)
 	}
-	return nil
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		details, err := admin.kadm.ListTopics(ctx, topic)
+		if err != nil {
+			return fmt.Errorf("verify deletion of topic %q: %w", topic, err)
+		}
+		detail, exists := details[topic]
+		if !exists || errors.Is(detail.Err, kerr.UnknownTopicOrPartition) {
+			return nil
+		}
+		if detail.Err != nil {
+			return fmt.Errorf("verify deletion of topic %q: %w", topic, detail.Err)
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("verify deletion of topic %q: %w", topic, ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 // Bounds freezes the visible broker range for one topic partition.

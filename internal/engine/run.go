@@ -87,12 +87,13 @@ type Violation struct {
 }
 
 type EnvironmentEvidence struct {
-	NetworkName            string `json:"networkName,omitempty"`
-	HostBroker             string `json:"hostBroker,omitempty"`
-	InternalBroker         string `json:"internalBroker,omitempty"`
-	HostSchemaRegistry     string `json:"hostSchemaRegistry,omitempty"`
-	InternalSchemaRegistry string `json:"internalSchemaRegistry,omitempty"`
-	PostgresSchemaTemplate string `json:"postgresSchemaTemplate,omitempty"`
+	NetworkName            string   `json:"networkName,omitempty"`
+	HostBroker             string   `json:"hostBroker,omitempty"`
+	InternalBroker         string   `json:"internalBroker,omitempty"`
+	HostSchemaRegistry     string   `json:"hostSchemaRegistry,omitempty"`
+	InternalSchemaRegistry string   `json:"internalSchemaRegistry,omitempty"`
+	PostgresSchemaTemplate string   `json:"postgresSchemaTemplate,omitempty"`
+	OwnedVolumes           []string `json:"ownedVolumes,omitempty"`
 }
 
 type AttemptEvidence struct {
@@ -388,7 +389,7 @@ func Run(ctx context.Context, config Config) (report Report) {
 		return report
 	}
 
-	runContext, cancel := context.WithTimeout(ctx, config.Scenario.Spec.Limits.MaxRunDuration.Duration)
+	runContext, cancel := newRunContext(ctx, config.Scenario.Spec.Limits.MaxRunDuration.Duration)
 	defer cancel()
 	if err := transition(journal, &report, "PROVISIONING"); err != nil {
 		report.fail("INFRASTRUCTURE_ERROR", err)
@@ -412,6 +413,7 @@ func Run(ctx context.Context, config Config) (report Report) {
 		HostSchemaRegistry:     environment.HostSchemaRegistry,
 		InternalSchemaRegistry: environment.InternalSchemaRegistry,
 		PostgresSchemaTemplate: "chronicle_template",
+		OwnedVolumes:           append([]string(nil), environment.OwnedVolumes...),
 	}
 	secretValues := []string{environment.PostgresAdminPassword, environment.HostPostgresDSN}
 	journal.SetSecretValues(secretValues)
@@ -602,21 +604,26 @@ func Run(ctx context.Context, config Config) (report Report) {
 	if interrupted && cleanupErr == nil {
 		report.State = "INTERRUPTED"
 	}
-	if strings.HasSuffix(report.Classification, "_REGRESSION") && report.FailureSignature != nil {
+	if strings.HasSuffix(report.Classification, "_REGRESSION") && report.FailureSignature != nil && report.State != "INTERRUPTED" {
 		if config.ExpectedSignature != "" && config.ExpectedSignature != report.FailureSignature.Digest {
 			report.fail("UNRESOLVED", fmt.Errorf("replay signature mismatch: got %s want %s", report.FailureSignature.Digest, config.ExpectedSignature))
+		} else if runContext.Err() != nil {
+			report.fail(classifyOperationalError(context.Cause(runContext)), context.Cause(runContext))
 		} else {
 			bundleErr := journaled(journal, "REPORTING", "create_reproduction_bundle", nil, func() error {
-				return bundle.Create(context.Background(), bundle.CreateConfig{
+				return bundle.Create(runContext, bundle.CreateConfig{
 					Path: filepath.Join(config.Output, "reproduction.zip"), RunID: report.RunID, Scenario: bundleScenario,
 					ScenarioRoot: config.ScenarioRoot, Baseline: config.Baseline, Candidate: config.Candidate,
 					EnvironmentLock: config.ImageLock, ExpectedSignature: report.FailureSignature.Digest, SecretValues: secretValues,
 				})
 			})
 			if bundleErr != nil {
-				report.fail("INFRASTRUCTURE_ERROR", bundleErr)
+				report.fail(classifyOperationalError(bundleErr), bundleErr)
 			} else {
 				report.Bundle = "reproduction.zip"
+				if runContext.Err() != nil {
+					report.fail(classifyOperationalError(context.Cause(runContext)), context.Cause(runContext))
+				}
 			}
 		}
 	}
@@ -1112,13 +1119,7 @@ func finalizeRun(output string, result *Report, journal *runlog.Journal, secretV
 	if result.Classification == "" {
 		result.Classification = "UNRESOLVED"
 	}
-	terminal := result.Classification
-	if result.State == "INTERRUPTED" {
-		terminal = "INTERRUPTED"
-	}
-	if result.Classification == "PASS" || strings.HasSuffix(result.Classification, "_REGRESSION") {
-		terminal = "COMPLETE"
-	}
+	terminal := terminalState(*result)
 	result.State = terminal
 	result.CompletedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	if err := journal.State("REPORTING", ""); err != nil {
@@ -1157,6 +1158,24 @@ func finalizeRun(output string, result *Report, journal *runlog.Journal, secretV
 	if err := journal.State(terminal, result.Error); err != nil {
 		result.fail("INFRASTRUCTURE_ERROR", err)
 	}
+}
+
+func terminalState(result Report) string {
+	terminal := result.Classification
+	if result.Classification == "PASS" || strings.HasSuffix(result.Classification, "_REGRESSION") {
+		terminal = "COMPLETE"
+	}
+	if result.State == "INTERRUPTED" {
+		terminal = "INTERRUPTED"
+	}
+	if result.Classification == "INFRASTRUCTURE_ERROR" {
+		terminal = "INFRASTRUCTURE_ERROR"
+	}
+	return terminal
+}
+
+func newRunContext(parent context.Context, duration time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeoutCause(parent, duration, context.DeadlineExceeded)
 }
 
 func matchingConfirmations(attempts []AttemptEvidence, digest string) int {

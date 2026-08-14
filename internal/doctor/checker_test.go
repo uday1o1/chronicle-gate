@@ -57,7 +57,7 @@ func TestCheckerStableOrderAndSuccess(t *testing.T) {
 	digestA := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	digestB := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	digestC := "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-	lock := `{"schemaVersion":"chronicle.dev/images-lock/v1alpha1","resolvedAt":"2026-08-13","images":[{"name":"example","role":"runtime","source":"example.invalid/image:v1","reference":"example.invalid/image@` + digestA + `","indexDigest":"` + digestA + `","platforms":{"linux/amd64":"` + digestB + `","linux/arm64":"` + digestC + `"},"reason":"test"}]}`
+	lock := `{"schemaVersion":"chronicle.dev/images-lock/v1alpha1","resolvedAt":"2026-08-13","images":[{"name":"example","role":"runtime","source":"example.invalid/image:v1","reference":"example.invalid/image@` + digestA + `","indexDigest":"` + digestA + `","platforms":{"linux/amd64":"` + digestB + `","linux/arm64":"` + digestC + `"},"hardening":{"capDrop":["ALL"],"capAdd":{"linux/amd64":[],"linux/arm64":[]}},"reason":"test"}]}`
 	if err := os.WriteFile(lockPath, []byte(lock), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}

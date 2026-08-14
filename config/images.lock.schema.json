@@ -39,8 +39,28 @@
             "linux/arm64": {"$ref": "#/$defs/digest"}
           }
         },
+        "hardening": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["capDrop", "capAdd"],
+          "properties": {
+            "capDrop": {"const": ["ALL"]},
+            "capAdd": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["linux/amd64", "linux/arm64"],
+              "properties": {
+                "linux/amd64": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+                "linux/arm64": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+              }
+            }
+          }
+        },
         "reason": {"type": "string", "minLength": 1}
-      }
+      },
+      "allOf": [
+        {"if": {"properties": {"role": {"const": "runtime"}}}, "then": {"required": ["hardening"]}}
+      ]
     }
   }
 }

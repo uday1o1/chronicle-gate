@@ -29,7 +29,14 @@ type Image struct {
 	Reference   string            `json:"reference"`
 	IndexDigest string            `json:"indexDigest"`
 	Platforms   map[string]string `json:"platforms"`
+	Hardening   *HardeningPolicy  `json:"hardening,omitempty"`
 	Reason      string            `json:"reason"`
+}
+
+// HardeningPolicy locks the capability policy for each supported runtime architecture.
+type HardeningPolicy struct {
+	CapDrop []string            `json:"capDrop"`
+	CapAdd  map[string][]string `json:"capAdd"`
 }
 
 // Load reads and strictly decodes an image lock.
@@ -123,6 +130,30 @@ func (lock Lock) Validate() error {
 			}
 			sort.Strings(platforms)
 			return fmt.Errorf("image %q has unsupported platform set %v", image.Name, platforms)
+		}
+		if image.Role == "runtime" {
+			if image.Hardening == nil || len(image.Hardening.CapDrop) != 1 || image.Hardening.CapDrop[0] != "ALL" {
+				return fmt.Errorf("runtime image %q must drop all capabilities", image.Name)
+			}
+			if len(image.Hardening.CapAdd) != len(requiredPlatforms) {
+				return fmt.Errorf("runtime image %q hardening must cover every supported platform", image.Name)
+			}
+			for _, platform := range requiredPlatforms {
+				capabilities, exists := image.Hardening.CapAdd[platform]
+				if !exists {
+					return fmt.Errorf("runtime image %q hardening is missing platform %q", image.Name, platform)
+				}
+				seenCapabilities := map[string]struct{}{}
+				for _, capability := range capabilities {
+					if capability == "" {
+						return fmt.Errorf("runtime image %q has an empty capability", image.Name)
+					}
+					if _, duplicate := seenCapabilities[capability]; duplicate {
+						return fmt.Errorf("runtime image %q duplicates capability %q", image.Name, capability)
+					}
+					seenCapabilities[capability] = struct{}{}
+				}
+			}
 		}
 	}
 

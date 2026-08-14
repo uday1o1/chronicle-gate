@@ -3,8 +3,8 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestones 0 through 7 are complete, including the portfolio-ready core checkpoint, the complete V1 observer model, the controlled cross-stream and event-time corpus, and the connected transactional-outbox corpus.
-Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, schema-compatible R4 default drift, stale-version R3, cross-stream R5, late-event R6, and duplicate-publication R7 pass their local acceptance gates.
+Milestones 0 through 8 are complete, including the portfolio-ready core checkpoint, the complete V1 observer model, the controlled cross-stream and event-time corpus, the connected transactional-outbox corpus, and the robustness and security gate.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, schema-compatible R4 default drift, stale-version R3, cross-stream R5, late-event R6, duplicate-publication R7, bounded cleanup, safe archives, runtime hardening, dependency review, race tests, and fuzz smoke tests pass their local acceptance gates.
 
 ## Bootstrap
 
