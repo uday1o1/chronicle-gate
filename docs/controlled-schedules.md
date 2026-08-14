@@ -58,14 +58,11 @@ R6 evidence records physical delivery sequence, source offset, CloudEvent event 
 The late-event predicate is `eventTime < acknowledgedWatermark <= deliveryLogicalTime`.
 The report renders these values separately in JSON, text, JUnit, and static HTML.
 
-The measured late case uses event time `2026-08-13T11:00:00Z`, watermark `2026-08-13T13:00:00Z`, delivery logical time `2026-08-13T13:00:00Z`, and source offsets `0` then `1`.
+The authored late case uses event time `2026-08-13T11:00:00Z`, watermark `2026-08-13T13:00:00Z`, delivery logical time `2026-08-13T13:00:00Z`, and append order from the active event to the cancellation.
 The baseline records `ignored_late` and remains `active`.
 The seeded candidate records `applied` and becomes `cancelled`.
 
-## Measured milestone evidence
+## Public release evidence
 
-The M6 integration gate passed on 2026-08-13 in 312.99 seconds on the documented local ARM64 environment.
-It executed R3, the R3 monotonic control, both R5 legal release orders, R6, and the R6 on-time control with one baseline and three candidate attempts each.
-It then deleted source images and reproduced the exact checked-in R3, R5, and R6 signatures from three separately verified bundles.
-The final complete M0 through M6 integration matrix passed in 897.8 seconds, with its M6 corpus and replay case completing in 358.95 seconds.
-These durations describe functional acceptance execution and are not product performance claims.
+Source-authenticated R3, R5, and R6 regression and control records are published in [`evidence/results`](../evidence/results).
+The public records retain exact outcomes, signatures, bounded observation summaries, artifact digests, and source provenance while the raw schedules, service logs, and embedded images remain outside Git.

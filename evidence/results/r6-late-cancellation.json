@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "chronicle.dev/public-case-evidence/v1alpha1",
+  "kind": "PublicCaseEvidence",
+  "caseId": "r6-late-cancellation",
+  "claimId": "R6",
+  "role": "regression",
+  "capturedAt": "2026-08-14T09:38:14Z",
+  "source": {
+    "commit": "e8246817012c1556dcd82593b8761dda833d0416",
+    "tree": "e1bed4d2b4f2540d23ad8cf7b2de565879b95010",
+    "binarySha256": "4b384088002505e1813e31e4425d7582688d362ef12ac46230796cd51ffa752f",
+    "binaryCommit": "e824681",
+    "argv": [
+      "bin/chronicle",
+      "run",
+      "--scenario",
+      "examples/order-lifecycle/scenarios/r6-late-cancellation.yaml",
+      "--baseline",
+      "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "--candidate",
+      "examples/order-lifecycle/targets/generated/state-r6-candidate.yaml",
+      "--out",
+      "run/release-evidence/r6-late-cancellation/raw",
+      "--development-local-images",
+      "--json",
+      "--no-minimize"
+    ],
+    "inputs": [
+      {
+        "path": "config/images.lock.json",
+        "sha256": "abd84f54373973b2c85a687fffcea726cf3a59a634e1d83eca863e8d9227aaf3"
+      },
+      {
+        "path": "evidence/corpus.json",
+        "sha256": "16751a3b097bd9b1849d658f350eeb4579be250f84d906a8232c4003ca5d3e5b"
+      },
+      {
+        "path": "examples/order-lifecycle/expected/r6-signature.json",
+        "sha256": "a4f591745afcdbbd15cf65136e350aa117589f3910da709c8cfce6d8afd2aac1"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/order-status.sql",
+        "sha256": "bfedfed7cdca7a59bc5e5a35258121748be1969d01bbd478eaef8508a1de7814"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/r6-late-cancellation.yaml",
+        "sha256": "42e629e7135750becb8c4047541d2021c48e072fe056c0cbd6809a16aee46399"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+        "sha256": "32172a61aa6160c47894e33bfc7211e99f6eb33690cd9e61478c46281bc1fe6b"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/state-r6-candidate.yaml",
+        "sha256": "63a04740bd7b011642e4b622f4ce1448ca140c4899d003e96404bb6965ea7c6f"
+      }
+    ]
+  },
+  "outcome": {
+    "exitCode": 2,
+    "state": "COMPLETE",
+    "classification": "SEMANTIC_REGRESSION",
+    "failureSignature": {
+      "invariantId": "order-status",
+      "classification": "SEMANTIC_REGRESSION",
+      "observationId": "order-status",
+      "rowKey": "",
+      "pointer": "/rows/0/status",
+      "expected": "active",
+      "actual": "cancelled",
+      "digest": "022eb460fefdb25079faba076eae57fbe98ddad6b51d4950cab87ffd088685d0"
+    },
+    "confirmations": 2,
+    "baselineAttempts": 1,
+    "candidateAttempts": 3,
+    "observations": [
+      {
+        "role": "baseline",
+        "observerId": "order-status",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-1",
+        "observerId": "order-status",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-2",
+        "observerId": "order-status",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-3",
+        "observerId": "order-status",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      }
+    ]
+  },
+  "reduction": {
+    "status": "skipped",
+    "minimality": "unavailable",
+    "originalEvents": 0,
+    "finalEvents": 0,
+    "originalActions": 0,
+    "finalActions": 0,
+    "trials": 0
+  },
+  "artifacts": {
+    "resultSha256": "4fa8b8f4f3104f0acc28f82389055c4dbeebf3d1622629ce88ddb334afc7fe20",
+    "checksumsSha256": "a40ae32fbc9f2516e3f30ca6bc5873ab2b5894f0abeaf0aa34641adbaade8895",
+    "journalSha256": "06dd34d5aa8a40da1c14508b1dedfb140c1be8b4f71168bfa17063c983bb8127",
+    "bundleSha256": "a49b09e7452a0a4e594f480a026630ab62199f0d8e9469b5ac9413ae8b53b1c5"
+  },
+  "boundary": "Synthetic local comparative evidence demonstrates only the declared ChronicleGate scenarios and does not establish production reliability or capacity."
+}

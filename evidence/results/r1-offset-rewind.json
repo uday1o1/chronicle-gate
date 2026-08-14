@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "chronicle.dev/public-case-evidence/v1alpha1",
+  "kind": "PublicCaseEvidence",
+  "caseId": "r1-offset-rewind",
+  "claimId": "R1",
+  "role": "regression",
+  "capturedAt": "2026-08-14T09:19:50Z",
+  "source": {
+    "commit": "e8246817012c1556dcd82593b8761dda833d0416",
+    "tree": "e1bed4d2b4f2540d23ad8cf7b2de565879b95010",
+    "binarySha256": "4b384088002505e1813e31e4425d7582688d362ef12ac46230796cd51ffa752f",
+    "binaryCommit": "e824681",
+    "argv": [
+      "bin/chronicle",
+      "run",
+      "--scenario",
+      "examples/order-lifecycle/scenarios/r1-offset-rewind-noisy.yaml",
+      "--baseline",
+      "examples/order-lifecycle/targets/generated/baseline.yaml",
+      "--candidate",
+      "examples/order-lifecycle/targets/generated/candidate.yaml",
+      "--out",
+      "run/release-evidence/r1-offset-rewind/raw",
+      "--development-local-images",
+      "--json"
+    ],
+    "inputs": [
+      {
+        "path": "config/images.lock.json",
+        "sha256": "abd84f54373973b2c85a687fffcea726cf3a59a634e1d83eca863e8d9227aaf3"
+      },
+      {
+        "path": "evidence/corpus.json",
+        "sha256": "16751a3b097bd9b1849d658f350eeb4579be250f84d906a8232c4003ca5d3e5b"
+      },
+      {
+        "path": "examples/order-lifecycle/expected/r1-signature.json",
+        "sha256": "c39d76d87b14441f2744c9d15439303a2764b2b310190b4ffdd10f25e1771bf2"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/duplicate-reservations.sql",
+        "sha256": "0f2c73f5a84d10121786b4cf88380ee972fb323bc846e2ff77420e200d012f9c"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/inventory-reservations.sql",
+        "sha256": "93b0fa1f7d6fe68ac8a0f76764add7fd1de2c62678063d73e6c4e15d697e6a3d"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/r1-offset-rewind-noisy.yaml",
+        "sha256": "6245af726f601b671315039aacd4260c0c64ff08759f175c942083e04ca07bdb"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/schemas/inventory-requested.schema.json",
+        "sha256": "acf3a89062d0cf4b2ce1acc3cf2247d9387e90bc1b291eeb051fa9704a2133ec"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/baseline.yaml",
+        "sha256": "b08632833e4f5ebd4521a14c244a94d8b35b083e348ba2c025191d9d472a46f1"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/candidate.yaml",
+        "sha256": "24f0abf1edd5eb5365c663da1b94864c84b063efba4372819cffe4a25ac71909"
+      }
+    ]
+  },
+  "outcome": {
+    "exitCode": 2,
+    "state": "COMPLETE",
+    "classification": "SEMANTIC_REGRESSION",
+    "failureSignature": {
+      "invariantId": "no-duplicate-reservations",
+      "classification": "SEMANTIC_REGRESSION",
+      "observationId": "no-duplicate-reservations",
+      "rowKey": "order_id=order-1|sku=sku-1",
+      "pointer": "/rows/0/reservation_count",
+      "expected": 1,
+      "actual": 2,
+      "digest": "344a2c61a869abdfc6a272ea4a35eb247158d41b619049cb8b6618ba71b6b29c"
+    },
+    "confirmations": 2,
+    "baselineAttempts": 1,
+    "candidateAttempts": 3,
+    "observations": []
+  },
+  "reduction": {
+    "status": "complete",
+    "minimality": "proven",
+    "originalEvents": 2,
+    "finalEvents": 1,
+    "originalActions": 7,
+    "finalActions": 6,
+    "trials": 8
+  },
+  "artifacts": {
+    "resultSha256": "021a70b85e532122477d7f3f4248091a723e612b4e65153d11314e588624e0ed",
+    "checksumsSha256": "30aa012ab069d5c5c793e949bfa2d68e0454ddb11078aa53ea53d5688a944d1a",
+    "journalSha256": "7d93e0435335169e6eb199fb7daf61ae4958d9088dc71b55d3f15c42e832688b",
+    "bundleSha256": "0012f1b56226b66ad1af48436b1655c18551c2f5c28b8c3df39b48a430fa32e2"
+  },
+  "boundary": "Synthetic local comparative evidence demonstrates only the declared ChronicleGate scenarios and does not establish production reliability or capacity."
+}

@@ -1,0 +1,13 @@
+{"version":2,"width":100,"height":28,"env":{"SHELL":"/bin/sh","TERM":"xterm-256color"}}
+[0.1,"o","ChronicleGate R1 verified demo\r\n"]
+[0.2,"o","$ bin/chronicle run --scenario examples/order-lifecycle/scenarios/r1-offset-rewind-noisy.yaml --baseline examples/order-lifecycle/targets/generated/baseline.yaml --candidate examples/order-lifecycle/targets/generated/candidate.yaml --out run/release-evidence/r1-offset-rewind/raw --development-local-images --json\r\n"]
+[0.3,"o","exit: 2\r\n"]
+[0.4,"o","classification: SEMANTIC_REGRESSION\r\n"]
+[0.5,"o","signature: 344a2c61a869abdfc6a272ea4a35eb247158d41b619049cb8b6618ba71b6b29c\r\n"]
+[0.6,"o","confirmations: 2\r\n"]
+[0.7,"o","reduction: events 2 -> 1, actions 7 -> 6, trials 8, minimality proven\r\n"]
+[0.8,"o","$ bin/chronicle run --scenario examples/order-lifecycle/scenarios/r1-single-delivery-control.yaml --baseline examples/order-lifecycle/targets/generated/baseline.yaml --candidate examples/order-lifecycle/targets/generated/candidate.yaml --out run/release-evidence/r1-single-delivery-control/raw --development-local-images --json --no-minimize\r\n"]
+[0.9,"o","exit: 0\r\n"]
+[1.0,"o","classification: PASS\r\n"]
+[1.1,"o","artifacts: checksummed reports, authoritative journal, verified regression bundle\r\n"]
+[1.2,"o","boundary: trusted synthetic workload, locked local Docker environment, development-local images\r\n"]

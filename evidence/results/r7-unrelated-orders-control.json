@@ -1,0 +1,174 @@
+{
+  "schemaVersion": "chronicle.dev/public-case-evidence/v1alpha1",
+  "kind": "PublicCaseEvidence",
+  "caseId": "r7-unrelated-orders-control",
+  "claimId": "R7-control",
+  "role": "control",
+  "capturedAt": "2026-08-14T09:42:07Z",
+  "source": {
+    "commit": "e8246817012c1556dcd82593b8761dda833d0416",
+    "tree": "e1bed4d2b4f2540d23ad8cf7b2de565879b95010",
+    "binarySha256": "4b384088002505e1813e31e4425d7582688d362ef12ac46230796cd51ffa752f",
+    "binaryCommit": "e824681",
+    "argv": [
+      "bin/chronicle",
+      "run",
+      "--scenario",
+      "examples/order-lifecycle/scenarios/r7-unrelated-orders-control.yaml",
+      "--baseline",
+      "examples/order-lifecycle/targets/generated/r7-baseline.yaml",
+      "--candidate",
+      "examples/order-lifecycle/targets/generated/r7-candidate.yaml",
+      "--out",
+      "run/release-evidence/r7-unrelated-orders-control/raw",
+      "--development-local-images",
+      "--json",
+      "--no-minimize"
+    ],
+    "inputs": [
+      {
+        "path": "config/images.lock.json",
+        "sha256": "abd84f54373973b2c85a687fffcea726cf3a59a634e1d83eca863e8d9227aaf3"
+      },
+      {
+        "path": "evidence/corpus.json",
+        "sha256": "16751a3b097bd9b1849d658f350eeb4579be250f84d906a8232c4003ca5d3e5b"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/duplicate-outbox-business-operations.sql",
+        "sha256": "a35c9cbf886d6b543e2cea65dbdbf451b585203729258c645aa5f96242bce1e3"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/outbox-terminal.sql",
+        "sha256": "3900918111d9ee1c8a56b720f851293c7855f648eabb0454a786943789e7541e"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/r7-unrelated-orders-control.yaml",
+        "sha256": "7b56b634e5ffed756e552ab3f5a469428262e60d592e415269abe5bd480eeb19"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/schemas/outbox-relay-trigger.schema.json",
+        "sha256": "c791c31d3e3389f12fab5cef3918cace5b43d5242cc05da4753f15db8935f098"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/r7-baseline.yaml",
+        "sha256": "277222397c3019b08e71822709a32968f51ef0ab60d7121a49ec024e5d6a1430"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/r7-candidate.yaml",
+        "sha256": "406c87035d81adcbb59d64bb45f0d9d56973d47c3d78616fba958bcf9c7201ef"
+      }
+    ]
+  },
+  "outcome": {
+    "exitCode": 0,
+    "state": "COMPLETE",
+    "classification": "PASS",
+    "failureSignature": null,
+    "confirmations": 0,
+    "baselineAttempts": 1,
+    "candidateAttempts": 3,
+    "observations": [
+      {
+        "role": "baseline",
+        "observerId": "capture-effects",
+        "type": "effects",
+        "count": 2,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "baseline",
+        "observerId": "fulfillment-state",
+        "type": "http",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "baseline",
+        "observerId": "outbox-state",
+        "type": "sql",
+        "count": 2,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-1",
+        "observerId": "capture-effects",
+        "type": "effects",
+        "count": 2,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-1",
+        "observerId": "fulfillment-state",
+        "type": "http",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-1",
+        "observerId": "outbox-state",
+        "type": "sql",
+        "count": 2,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-2",
+        "observerId": "capture-effects",
+        "type": "effects",
+        "count": 2,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-2",
+        "observerId": "fulfillment-state",
+        "type": "http",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-2",
+        "observerId": "outbox-state",
+        "type": "sql",
+        "count": 2,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-3",
+        "observerId": "capture-effects",
+        "type": "effects",
+        "count": 2,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-3",
+        "observerId": "fulfillment-state",
+        "type": "http",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-3",
+        "observerId": "outbox-state",
+        "type": "sql",
+        "count": 2,
+        "rawSchemaValid": true
+      }
+    ]
+  },
+  "reduction": {
+    "status": "skipped",
+    "minimality": "unavailable",
+    "originalEvents": 0,
+    "finalEvents": 0,
+    "originalActions": 0,
+    "finalActions": 0,
+    "trials": 0
+  },
+  "artifacts": {
+    "resultSha256": "af8a03833e7da19c995584f325d6297a0b7f1980f4b282fe4ff96ad9e81da729",
+    "checksumsSha256": "d52fb11f9cc0dd0abd407919335e3aeba11c1341fbb8235cf461df17180d426f",
+    "journalSha256": "6f2ce8aa054b63fe9dcb42e49534782c3c7f7c058962e19c0dba877cf7c04f81",
+    "bundleSha256": null
+  },
+  "boundary": "Synthetic local comparative evidence demonstrates only the declared ChronicleGate scenarios and does not establish production reliability or capacity."
+}

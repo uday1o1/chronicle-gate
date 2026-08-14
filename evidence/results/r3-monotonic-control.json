@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "chronicle.dev/public-case-evidence/v1alpha1",
+  "kind": "PublicCaseEvidence",
+  "caseId": "r3-monotonic-control",
+  "claimId": "R3-control",
+  "role": "control",
+  "capturedAt": "2026-08-14T09:25:28Z",
+  "source": {
+    "commit": "e8246817012c1556dcd82593b8761dda833d0416",
+    "tree": "e1bed4d2b4f2540d23ad8cf7b2de565879b95010",
+    "binarySha256": "4b384088002505e1813e31e4425d7582688d362ef12ac46230796cd51ffa752f",
+    "binaryCommit": "e824681",
+    "argv": [
+      "bin/chronicle",
+      "run",
+      "--scenario",
+      "examples/order-lifecycle/scenarios/r3-monotonic-version-control.yaml",
+      "--baseline",
+      "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "--candidate",
+      "examples/order-lifecycle/targets/generated/state-r3-candidate.yaml",
+      "--out",
+      "run/release-evidence/r3-monotonic-control/raw",
+      "--development-local-images",
+      "--json",
+      "--no-minimize"
+    ],
+    "inputs": [
+      {
+        "path": "config/images.lock.json",
+        "sha256": "abd84f54373973b2c85a687fffcea726cf3a59a634e1d83eca863e8d9227aaf3"
+      },
+      {
+        "path": "evidence/corpus.json",
+        "sha256": "16751a3b097bd9b1849d658f350eeb4579be250f84d906a8232c4003ca5d3e5b"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/order-version.sql",
+        "sha256": "b54e7ab85814b3047dd5b4dcb5243933976fc411f07c6ad485b4d7e1ee0e9f78"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/r3-monotonic-version-control.yaml",
+        "sha256": "40178b284acf5bf0b5ba9a5476ba59ba40728c6ea5068476a4ac54602791a26f"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+        "sha256": "32172a61aa6160c47894e33bfc7211e99f6eb33690cd9e61478c46281bc1fe6b"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/state-r3-candidate.yaml",
+        "sha256": "cf50c8c87b6e4ed4664f5056640171904478ff766b1c20a778bfc4d6797bc8eb"
+      }
+    ]
+  },
+  "outcome": {
+    "exitCode": 0,
+    "state": "COMPLETE",
+    "classification": "PASS",
+    "failureSignature": null,
+    "confirmations": 0,
+    "baselineAttempts": 1,
+    "candidateAttempts": 3,
+    "observations": [
+      {
+        "role": "baseline",
+        "observerId": "order-version",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-1",
+        "observerId": "order-version",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-2",
+        "observerId": "order-version",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-3",
+        "observerId": "order-version",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      }
+    ]
+  },
+  "reduction": {
+    "status": "skipped",
+    "minimality": "unavailable",
+    "originalEvents": 0,
+    "finalEvents": 0,
+    "originalActions": 0,
+    "finalActions": 0,
+    "trials": 0
+  },
+  "artifacts": {
+    "resultSha256": "fa0af1b84e9a330c94809c6b392ceb874e31fc442792a4b50c9ffc69ba1a9bf6",
+    "checksumsSha256": "071b8909cbe9ddcc4ce24b636f246517d27640e53dbb552f8c7fdc7f69e10310",
+    "journalSha256": "b68252e719cc32f1042db439357904bc6f5ca236cdb5a102288ecfd0d8fce763",
+    "bundleSha256": null
+  },
+  "boundary": "Synthetic local comparative evidence demonstrates only the declared ChronicleGate scenarios and does not establish production reliability or capacity."
+}

@@ -75,23 +75,14 @@ The Milestone 7 control matrix adds or strengthens these public-CLI checks.
 | R5 payment first | `PASS`, exit `0` | The alternative legal cross-stream release order reaches the terminal state. |
 | R6 on-time cancellation | `PASS`, exit `0` | A cancellation after the watermark rule remains applicable. |
 
-## Measured functional acceptance
+## Public release evidence
 
-The complete M0 through M7 Docker integration matrix passed twice on 2026-08-13 in the documented local ARM64 environment.
-These durations describe functional acceptance execution and are not product performance claims.
-
-| Acceptance execution | First pass | Second pass |
-| --- | ---: | ---: |
-| R3, R5, and R6 controlled corpus plus offline replay | 342.56 s | 357.01 s |
-| R7 crash, confirmation, and offline replay | 112.41 s | 121.63 s |
-| M7 nearby control matrix | 98.76 s | 100.55 s |
-| Complete M0 through M7 integration binary | 1060.8 s | 1059.9 s |
-
-Both complete passes reproduced every checked-in R1 through R7 signature, passed every approved nearby control, and left no attempt-scoped ChronicleGate container or network after cleanup.
-The R7 replay removed the source service images first, verified the bundle and all embedded image archives, restored their exact local image identities, and reproduced the same checked-in signature from a new empty output directory.
+The source-authenticated R7 crash and unrelated-orders control records are published in [`evidence/results`](../evidence/results).
+The sanitized records retain exact outcomes, signatures, bounded observation summaries, artifact digests, and source provenance.
+The publisher emits a record only after its private capture proves exact cleanup with no retained attempt resources.
+The private checksummed runs retain acknowledged publications, topic bounds, group positions, quiescence samples, database fingerprints, and verified embedded-image bundles.
 
 ## Claim boundary
 
 The evidence supports deterministic local qualification of the repository-trusted synthetic topology under the locked environment and documented resource assumptions.
-It does not claim arbitrary third-party service discovery, production data safety, cross-platform portability for development-local image bundles, or benchmark performance.
-Milestones 8 through 10 govern the remaining robustness, security, benchmark, and portfolio-release gates.
+It does not claim arbitrary third-party service discovery, production data safety, cross-platform portability for development-local image bundles, or production benchmark capacity.

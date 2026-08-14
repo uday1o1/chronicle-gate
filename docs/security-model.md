@@ -94,21 +94,12 @@ The pinned Docker golangci-lint image provides the broader lint and staticcheck 
 Trusted Docker integration runs on a GitHub-hosted Ubuntu runner and never on a privileged self-hosted pull-request runner.
 The pinned dependency-review action runs only for pull requests.
 
-## Verified Milestone 8 evidence
+## Verification gates
 
-The complete local `make verify` gate passed on 2026-08-13 in 1,768 seconds on the development host.
-The gate included formatting, unit and property tests, `go vet`, race tests, the repository security policy, `govulncheck`, six bounded fuzz targets, native and cross-platform builds, pinned golangci-lint, and the complete Docker integration suite.
-`govulncheck` found no reachable vulnerabilities and no vulnerabilities in imported packages.
-It reported three advisories in required modules whose vulnerable symbols are not called.
-
-All eleven live integrations passed in that gate.
-The abrupt-interruption test delivered `SIGINT`, observed exit code `130`, preserved an `INTERRUPTED` journal without a `COMPLETE` record, and verified exact cleanup in 26.33 seconds.
-The R4 schema and observer run plus offline bundle replay passed in 321.46 seconds.
-The controlled R3, R5, and R6 corpus plus offline replay passed in 495.95 seconds.
-The R7 connected-outbox fault and replay passed in 158.27 seconds, and its nearby control matrix passed in 185.01 seconds.
-
+`make verify` runs formatting, unit and property tests, `go vet`, race tests, repository security policy, `govulncheck`, bounded fuzz targets, native and cross-platform builds, pinned golangci-lint, and the complete Docker integration suite.
+The interruption integration delivers `SIGINT`, requires exit code `130`, requires an `INTERRUPTED` journal without a `COMPLETE` record, and verifies exact cleanup.
 The archive unit and fuzz corpus rejects traversal variants, unsafe aliases, duplicate and case-colliding paths, malformed local-image metadata, direct expansion bombs, creation-side expansion bombs, and oversized image members.
-The cancellation tests prove that a published bundle is removed only when it is the exact retained temporary inode and that an existing destination is never overwritten.
+The cancellation tests require that a published bundle is removed only when it is the exact retained temporary inode and that an existing destination is never overwritten.
 
 ## Residual risks
 

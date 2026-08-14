@@ -49,7 +49,10 @@ func CheckReleaseRepository(repository string) error {
 	} else if err != nil {
 		return err
 	}
-	return checkPublicEvidence(repository, corpus, resultsRoot)
+	if err := checkPublicEvidence(repository, corpus, resultsRoot); err != nil {
+		return err
+	}
+	return checkPublicDocumentation(repository)
 }
 
 func checkTrackedArtifacts(repository string) error {
@@ -105,6 +108,24 @@ func checkWorkflowHistory(repository string) error {
 		checkoutCount := strings.Count(text, "uses: actions/checkout@")
 		if checkoutCount == 0 || strings.Count(text, "fetch-depth: 0") != checkoutCount {
 			return fmt.Errorf("workflow %s does not retain full source history for every checkout", filepath.Base(path))
+		}
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "uses:") {
+				continue
+			}
+			fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(line, "uses:")))
+			if len(fields) == 0 {
+				return fmt.Errorf("workflow %s has an empty action reference", filepath.Base(path))
+			}
+			reference := fields[0]
+			if strings.HasPrefix(reference, "./") {
+				continue
+			}
+			at := strings.LastIndexByte(reference, '@')
+			if at < 0 || len(reference[at+1:]) != 40 || !isLowerHex(reference[at+1:]) {
+				return fmt.Errorf("workflow %s action is not pinned to a full commit SHA: %s", filepath.Base(path), reference)
+			}
 		}
 	}
 	return nil
@@ -176,7 +197,26 @@ func checkPublicCaseFile(repository, path string, item SemanticCase) error {
 	if err := validatePublicCase(value, item); err != nil {
 		return err
 	}
+	expected, err := expectedSignature(repository, item.ExpectedSignature)
+	if err != nil {
+		return err
+	}
+	expectedDocument, err := json.Marshal(expected)
+	if err != nil || !jsonEquivalent(value.Outcome.FailureSignature, expectedDocument) {
+		return fmt.Errorf("public case evidence %s does not match its checked-in signature", item.ID)
+	}
 	return checkHistoricalSource(repository, value.Source)
+}
+
+func isLowerHex(value string) bool {
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			if character < 'a' || character > 'f' {
+				return false
+			}
+		}
+	}
+	return value != ""
 }
 
 func checkPublicBenchmarkFile(repository, path string) error {

@@ -283,6 +283,71 @@ func TestJSONEquivalenceIgnoresFormattingButNotValues(t *testing.T) {
 	}
 }
 
+func TestMeasuredEvidencePointerFailsClosed(t *testing.T) {
+	repository := t.TempDir()
+	results := filepath.Join(repository, "evidence", "results")
+	if err := os.MkdirAll(results, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(results, "case.json"), []byte(`{"outcome":{"confirmations":2,"nullable":null}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolveMeasuredPointer(repository, "evidence/results/case.json", "/outcome/confirmations"); err != nil {
+		t.Fatal(err)
+	}
+	for _, pointer := range []string{"/outcome/missing", "/outcome/nullable", "/outcome/confirmations/value"} {
+		if err := resolveMeasuredPointer(repository, "evidence/results/case.json", pointer); err == nil {
+			t.Fatalf("invalid measured pointer %s was accepted", pointer)
+		}
+	}
+}
+
+func TestDemoCastRequiresOutputOnlyMonotonicEvents(t *testing.T) {
+	directory := t.TempDir()
+	valid := strings.Join([]string{
+		`{"version":2,"width":100,"height":28,"env":{"SHELL":"/bin/sh","TERM":"xterm-256color"}}`,
+		`[0.1,"o","first\r\n"]`,
+		`[0.2,"o","second\r\n"]`,
+	}, "\n") + "\n"
+	path := filepath.Join(directory, "demo.cast")
+	if err := os.WriteFile(path, []byte(valid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := readCastOutput(path); err != nil || output != "first\r\nsecond\r\n" {
+		t.Fatalf("valid cast output = %q, %v", output, err)
+	}
+	for name, mutation := range map[string]string{
+		"input event":       strings.Replace(valid, `0.2,"o"`, `0.2,"i"`, 1),
+		"nonmonotonic time": strings.Replace(valid, `0.2,"o"`, `0.1,"o"`, 1),
+		"terminal escape":   strings.Replace(valid, `second\r\n`, `\u001b[31msecond\r\n`, 1),
+	} {
+		if err := os.WriteFile(path, []byte(mutation), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readCastOutput(path); err == nil {
+			t.Fatalf("%s was accepted", name)
+		}
+	}
+}
+
+func TestPublishedDemoMatchesEvidence(t *testing.T) {
+	if err := checkDemo(repositoryRoot(t)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPublicMarkdownContracts(t *testing.T) {
+	repository := repositoryRoot(t)
+	for _, path := range requiredPublicDocuments {
+		if err := checkPublicMarkdown(repository, path); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+	if err := checkREADMEOrder(repository); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func validCapture(kind string) Capture {
 	journal := strings.Repeat("b", 64)
 	return Capture{

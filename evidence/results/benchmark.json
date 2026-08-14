@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "chronicle.dev/public-benchmark-evidence/v1alpha1",
+  "kind": "PublicBenchmarkEvidence",
+  "boundary": "Synthetic local comparative evidence demonstrates only the declared ChronicleGate scenarios and does not establish production reliability or capacity.",
+  "comparisons": [
+    {
+      "caseId": "benchmark-aa",
+      "capturedAt": "2026-08-14T10:12:24Z",
+      "source": {
+        "commit": "d9aa472311bf82f8e4f7690f7fc955ac4280a729",
+        "tree": "e9732d7f3412c54d4cb9af2c61f47f9e0537c5f6",
+        "binarySha256": "be3bee18cd10006ebefd55460943ecd66d70597c409aae0168ae581660708b29",
+        "binaryCommit": "d9aa472",
+        "argv": [
+          "bin/chronicle",
+          "bench",
+          "--workload",
+          "benchmarks/workloads/order-api.yaml",
+          "--baseline",
+          "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
+          "--candidate",
+          "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
+          "--out",
+          "run/release-evidence/benchmark-aa/raw",
+          "--development-local-images",
+          "--json"
+        ],
+        "inputs": [
+          {
+            "path": "benchmarks/workloads/order-api.yaml",
+            "sha256": "4118b43a618759bb99a6a3a54f0670e57be82c023534a55e8fdb0d41a766704e"
+          },
+          {
+            "path": "config/images.lock.json",
+            "sha256": "abd84f54373973b2c85a687fffcea726cf3a59a634e1d83eca863e8d9227aaf3"
+          },
+          {
+            "path": "evidence/corpus.json",
+            "sha256": "16751a3b097bd9b1849d658f350eeb4579be250f84d906a8232c4003ca5d3e5b"
+          },
+          {
+            "path": "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
+            "sha256": "0a933c477d6e578ee353d49b595cc12c71cfc21349744b14557f1cd2510dbf37"
+          }
+        ]
+      },
+      "outcome": {
+        "exitCode": 0,
+        "state": "COMPLETE",
+        "classification": "PASS",
+        "rounds": 4,
+        "baselineRequests": 160,
+        "candidateRequests": 160,
+        "baselineP95Nanos": 2847375,
+        "candidateP95Nanos": 2874875,
+        "meanAbsoluteP95DeltaNanos": -720500.25,
+        "lowerRelativeCI": -0.37370314123532333,
+        "upperRelativeCI": 0.0502822380842019,
+        "regression": false
+      },
+      "artifacts": {
+        "resultSha256": "7f15c4da482d1aae1a9007439b170c341f371334dbe30efcf04e110f0529fdc8",
+        "checksumsSha256": "411628e56b61a0927153697a2f92a822551935b5d52a9a74e4d15835af2acd41",
+        "journalSha256": null,
+        "bundleSha256": null
+      }
+    },
+    {
+      "caseId": "benchmark-slowdown",
+      "capturedAt": "2026-08-14T10:13:35Z",
+      "source": {
+        "commit": "d9aa472311bf82f8e4f7690f7fc955ac4280a729",
+        "tree": "e9732d7f3412c54d4cb9af2c61f47f9e0537c5f6",
+        "binarySha256": "be3bee18cd10006ebefd55460943ecd66d70597c409aae0168ae581660708b29",
+        "binaryCommit": "d9aa472",
+        "argv": [
+          "bin/chronicle",
+          "bench",
+          "--workload",
+          "benchmarks/workloads/order-api.yaml",
+          "--baseline",
+          "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
+          "--candidate",
+          "examples/order-lifecycle/targets/generated/benchmark-candidate.yaml",
+          "--out",
+          "run/release-evidence/benchmark-slowdown/raw",
+          "--development-local-images",
+          "--json"
+        ],
+        "inputs": [
+          {
+            "path": "benchmarks/workloads/order-api.yaml",
+            "sha256": "4118b43a618759bb99a6a3a54f0670e57be82c023534a55e8fdb0d41a766704e"
+          },
+          {
+            "path": "config/images.lock.json",
+            "sha256": "abd84f54373973b2c85a687fffcea726cf3a59a634e1d83eca863e8d9227aaf3"
+          },
+          {
+            "path": "evidence/corpus.json",
+            "sha256": "16751a3b097bd9b1849d658f350eeb4579be250f84d906a8232c4003ca5d3e5b"
+          },
+          {
+            "path": "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
+            "sha256": "0a933c477d6e578ee353d49b595cc12c71cfc21349744b14557f1cd2510dbf37"
+          },
+          {
+            "path": "examples/order-lifecycle/targets/generated/benchmark-candidate.yaml",
+            "sha256": "473b3e4b840e2dd77fe3b076545bf64aa02113a854f349c67602f44a60d1a56e"
+          }
+        ]
+      },
+      "outcome": {
+        "exitCode": 2,
+        "state": "COMPLETE",
+        "classification": "PERFORMANCE_REGRESSION",
+        "rounds": 4,
+        "baselineRequests": 160,
+        "candidateRequests": 160,
+        "baselineP95Nanos": 6286625,
+        "candidateP95Nanos": 29865292,
+        "meanAbsoluteP95DeltaNanos": 25425229,
+        "lowerRelativeCI": 3.6822426230776233,
+        "upperRelativeCI": 9.91488610409796,
+        "regression": true
+      },
+      "artifacts": {
+        "resultSha256": "1fc2a8a46ab316d49924891fd77caf12c2f18abfcf5812e7f9c36c2902694034",
+        "checksumsSha256": "eb34ae873e014bd74674bc795b57fc17b58df3d6a8520c2dc079166386168cb0",
+        "journalSha256": null,
+        "bundleSha256": null
+      }
+    }
+  ]
+}

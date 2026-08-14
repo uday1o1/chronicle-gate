@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "chronicle.dev/public-case-evidence/v1alpha1",
+  "kind": "PublicCaseEvidence",
+  "caseId": "r5-inventory-first",
+  "claimId": "R5",
+  "role": "regression",
+  "capturedAt": "2026-08-14T09:28:49Z",
+  "source": {
+    "commit": "e8246817012c1556dcd82593b8761dda833d0416",
+    "tree": "e1bed4d2b4f2540d23ad8cf7b2de565879b95010",
+    "binarySha256": "4b384088002505e1813e31e4425d7582688d362ef12ac46230796cd51ffa752f",
+    "binaryCommit": "e824681",
+    "argv": [
+      "bin/chronicle",
+      "run",
+      "--scenario",
+      "examples/order-lifecycle/scenarios/r5-inventory-first-regression.yaml",
+      "--baseline",
+      "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "--candidate",
+      "examples/order-lifecycle/targets/generated/state-r5-candidate.yaml",
+      "--out",
+      "run/release-evidence/r5-inventory-first/raw",
+      "--development-local-images",
+      "--json",
+      "--no-minimize"
+    ],
+    "inputs": [
+      {
+        "path": "config/images.lock.json",
+        "sha256": "abd84f54373973b2c85a687fffcea726cf3a59a634e1d83eca863e8d9227aaf3"
+      },
+      {
+        "path": "evidence/corpus.json",
+        "sha256": "16751a3b097bd9b1849d658f350eeb4579be250f84d906a8232c4003ca5d3e5b"
+      },
+      {
+        "path": "examples/order-lifecycle/expected/r5-signature.json",
+        "sha256": "8896b2dca13dfa59230a479eeb95ed921c83ef5901c5a420ac509b7c619f1df8"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/order-status.sql",
+        "sha256": "bfedfed7cdca7a59bc5e5a35258121748be1969d01bbd478eaef8508a1de7814"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/r5-inventory-first-regression.yaml",
+        "sha256": "b72d0f9d6b2cfeeafb353b4892be9eea9365247d7141315f6d5ccd5ae4f455f3"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+        "sha256": "32172a61aa6160c47894e33bfc7211e99f6eb33690cd9e61478c46281bc1fe6b"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/state-r5-candidate.yaml",
+        "sha256": "140c3cc9b66816580d201d2d2034181fabc4624f3e7f90787179da7923031277"
+      }
+    ]
+  },
+  "outcome": {
+    "exitCode": 2,
+    "state": "COMPLETE",
+    "classification": "SEMANTIC_REGRESSION",
+    "failureSignature": {
+      "invariantId": "order-status",
+      "classification": "SEMANTIC_REGRESSION",
+      "observationId": "order-status",
+      "rowKey": "",
+      "pointer": "/rows/0/status",
+      "expected": "ready",
+      "actual": "payment_received",
+      "digest": "c2fad8b52cce868bcd572f8d8e0defc8ef1e6cf6abddf00fb1008f44c630c4c2"
+    },
+    "confirmations": 2,
+    "baselineAttempts": 1,
+    "candidateAttempts": 3,
+    "observations": [
+      {
+        "role": "baseline",
+        "observerId": "order-status",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-1",
+        "observerId": "order-status",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-2",
+        "observerId": "order-status",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-3",
+        "observerId": "order-status",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      }
+    ]
+  },
+  "reduction": {
+    "status": "skipped",
+    "minimality": "unavailable",
+    "originalEvents": 0,
+    "finalEvents": 0,
+    "originalActions": 0,
+    "finalActions": 0,
+    "trials": 0
+  },
+  "artifacts": {
+    "resultSha256": "7fbe10aa403d68b86318c646900fb8d67ec31fd6c0666062372676e2be9e8516",
+    "checksumsSha256": "b7fd64276a3ee834291e796dc5b54c3389749018a04c390604f16af671a770dd",
+    "journalSha256": "44e0b676ed2181505a6e0798dd24909c42d8c24285f98d460f0bf2968afe333e",
+    "bundleSha256": "d561f9b62884f2391dfaac518eafbc6d1edc91fd2c16fe0e81ddb90ff9590aea"
+  },
+  "boundary": "Synthetic local comparative evidence demonstrates only the declared ChronicleGate scenarios and does not establish production reliability or capacity."
+}

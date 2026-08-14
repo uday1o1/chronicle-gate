@@ -56,8 +56,8 @@ An invalid baseline runtime payload makes the comparison unresolved.
 A candidate-only payload validation failure after a valid baseline is a confirmable `SCHEMA_REGRESSION`.
 Equal valid schemas with different business behavior are a confirmable `SEMANTIC_REGRESSION`, as demonstrated by R4.
 
-## Measured milestone evidence
+## Public release evidence
 
-The complete Docker-backed M0-M5 integration suite passed on 2026-08-13 in 455 seconds on the documented local ARM64 environment.
-The R4 semantic regression, explicit-default control, candidate-only schema regression, invalid-baseline control, source-image removal, verified offline replay, and four-format normalization report checks completed in 129.24 seconds within that run.
-These durations describe functional acceptance execution and are not product performance claims.
+The R4 schema-default regression and explicit-default control records are published in [`evidence/results`](../evidence/results).
+The sanitized records retain exact classifications, signatures, observation schema validity, counts, artifact digests, and source provenance.
+Detailed Registry exchanges, normalized values, and embedded replay inputs stay in the private checksummed run rather than Git.

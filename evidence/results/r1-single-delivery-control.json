@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "chronicle.dev/public-case-evidence/v1alpha1",
+  "kind": "PublicCaseEvidence",
+  "caseId": "r1-single-delivery-control",
+  "claimId": "R1-control",
+  "role": "control",
+  "capturedAt": "2026-08-14T09:20:33Z",
+  "source": {
+    "commit": "e8246817012c1556dcd82593b8761dda833d0416",
+    "tree": "e1bed4d2b4f2540d23ad8cf7b2de565879b95010",
+    "binarySha256": "4b384088002505e1813e31e4425d7582688d362ef12ac46230796cd51ffa752f",
+    "binaryCommit": "e824681",
+    "argv": [
+      "bin/chronicle",
+      "run",
+      "--scenario",
+      "examples/order-lifecycle/scenarios/r1-single-delivery-control.yaml",
+      "--baseline",
+      "examples/order-lifecycle/targets/generated/baseline.yaml",
+      "--candidate",
+      "examples/order-lifecycle/targets/generated/candidate.yaml",
+      "--out",
+      "run/release-evidence/r1-single-delivery-control/raw",
+      "--development-local-images",
+      "--json",
+      "--no-minimize"
+    ],
+    "inputs": [
+      {
+        "path": "config/images.lock.json",
+        "sha256": "abd84f54373973b2c85a687fffcea726cf3a59a634e1d83eca863e8d9227aaf3"
+      },
+      {
+        "path": "evidence/corpus.json",
+        "sha256": "16751a3b097bd9b1849d658f350eeb4579be250f84d906a8232c4003ca5d3e5b"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/duplicate-reservations.sql",
+        "sha256": "0f2c73f5a84d10121786b4cf88380ee972fb323bc846e2ff77420e200d012f9c"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/queries/inventory-reservations.sql",
+        "sha256": "93b0fa1f7d6fe68ac8a0f76764add7fd1de2c62678063d73e6c4e15d697e6a3d"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/r1-single-delivery-control.yaml",
+        "sha256": "58315096ec466d4b4b57f646345d1b115d51b547db29dbaf6d3ba8c32d321cc0"
+      },
+      {
+        "path": "examples/order-lifecycle/scenarios/schemas/inventory-requested.schema.json",
+        "sha256": "acf3a89062d0cf4b2ce1acc3cf2247d9387e90bc1b291eeb051fa9704a2133ec"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/baseline.yaml",
+        "sha256": "b08632833e4f5ebd4521a14c244a94d8b35b083e348ba2c025191d9d472a46f1"
+      },
+      {
+        "path": "examples/order-lifecycle/targets/generated/candidate.yaml",
+        "sha256": "24f0abf1edd5eb5365c663da1b94864c84b063efba4372819cffe4a25ac71909"
+      }
+    ]
+  },
+  "outcome": {
+    "exitCode": 0,
+    "state": "COMPLETE",
+    "classification": "PASS",
+    "failureSignature": null,
+    "confirmations": 0,
+    "baselineAttempts": 1,
+    "candidateAttempts": 3,
+    "observations": [
+      {
+        "role": "baseline",
+        "observerId": "inventory-reservations",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-1",
+        "observerId": "inventory-reservations",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-2",
+        "observerId": "inventory-reservations",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      },
+      {
+        "role": "candidate-3",
+        "observerId": "inventory-reservations",
+        "type": "sql",
+        "count": 1,
+        "rawSchemaValid": true
+      }
+    ]
+  },
+  "reduction": {
+    "status": "skipped",
+    "minimality": "unavailable",
+    "originalEvents": 0,
+    "finalEvents": 0,
+    "originalActions": 0,
+    "finalActions": 0,
+    "trials": 0
+  },
+  "artifacts": {
+    "resultSha256": "752f20cccf1663886eccc669f385cdc7031925a45e1bf0452c8136a1007bb7d3",
+    "checksumsSha256": "c197fe6376f18446e4e5579f0c6d785da16e7c106e14793deb8295feaac0bc69",
+    "journalSha256": "cbc98b368c1469158dff714cb97515cf63db7b2668a2acee7023f5cffc4877ce",
+    "bundleSha256": null
+  },
+  "boundary": "Synthetic local comparative evidence demonstrates only the declared ChronicleGate scenarios and does not establish production reliability or capacity."
+}
