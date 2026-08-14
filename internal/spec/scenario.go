@@ -18,6 +18,14 @@ type ScenarioSpec struct {
 	Normalization []Normalization       `json:"normalization" yaml:"normalization"`
 	Limits        Limits                `json:"limits" yaml:"limits"`
 	Comparison    Comparison            `json:"comparison,omitempty" yaml:"comparison,omitempty"`
+	Control       *ControlledExecution  `json:"control,omitempty" yaml:"control,omitempty"`
+}
+
+// ControlledExecution declares the broker-real schedule whose evidence must be
+// proven before business observations are comparable.
+type ControlledExecution struct {
+	Mode       string `json:"mode" yaml:"mode"`
+	ExpectLate bool   `json:"expectLate" yaml:"expectLate"`
 }
 
 type ClockSpec struct {

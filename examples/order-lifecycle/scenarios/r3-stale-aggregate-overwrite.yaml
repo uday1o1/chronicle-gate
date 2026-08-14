@@ -1,0 +1,86 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: stale-aggregate-overwrite
+  description: A physically later stale aggregate version must not replace newer state.
+spec:
+  seed: {}
+  clock:
+    start: "2026-08-13T12:00:00Z"
+  control:
+    mode: aggregate-version
+    expectLate: false
+  events:
+    newer-state:
+      specversion: "1.0"
+      id: order-confirmed-v2
+      source: /orders/order-1
+      type: dev.chronicle.order.updated
+      subject: order-1
+      time: "2026-08-13T12:00:00Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 2
+      data:
+        status: confirmed
+    stale-state:
+      specversion: "1.0"
+      id: order-created-v1
+      source: /orders/order-1
+      type: dev.chronicle.order.updated
+      subject: order-1
+      time: "2026-08-13T11:55:00Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 1
+      data:
+        status: created
+  steps:
+    - id: arm-newer
+      armCheckpoint: {service: order-workflow, name: before_handler, eventId: order-confirmed-v2, stepId: publish-newer, occurrence: 1}
+    - id: publish-newer
+      dependsOn: [arm-newer]
+      publish: {event: newer-state, topic: order-updates, partition: 0, key: order-1}
+    - id: await-newer
+      dependsOn: [publish-newer]
+      timeout: 20s
+      await:
+        checkpoint: {service: order-workflow, name: before_handler, eventId: order-confirmed-v2, stepId: publish-newer, occurrence: 1}
+    - id: release-newer
+      dependsOn: [await-newer]
+      releaseCheckpoint: {service: order-workflow, name: before_handler, eventId: order-confirmed-v2, stepId: publish-newer, occurrence: 1}
+    - id: arm-stale
+      dependsOn: [release-newer]
+      armCheckpoint: {service: order-workflow, name: before_handler, eventId: order-created-v1, stepId: publish-stale, occurrence: 1}
+    - id: publish-stale
+      dependsOn: [arm-stale]
+      publish: {event: stale-state, topic: order-updates, partition: 0, key: order-1}
+    - id: await-stale
+      dependsOn: [publish-stale]
+      timeout: 20s
+      await:
+        checkpoint: {service: order-workflow, name: before_handler, eventId: order-created-v1, stepId: publish-stale, occurrence: 1}
+    - id: release-stale
+      dependsOn: [await-stale]
+      releaseCheckpoint: {service: order-workflow, name: before_handler, eventId: order-created-v1, stepId: publish-stale, occurrence: 1}
+    - id: observe-version
+      dependsOn: [release-stale]
+      timeout: 15s
+      observe: {observation: order-version}
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 1s
+    conditions:
+      - {id: order-update-lag, type: groupLagZero, group: order-workflow.order-updates}
+      - {id: workflow-idle, type: probeIdle, service: order-workflow}
+      - {id: checkpoints-clear, type: checkpointsClear, service: order-workflow}
+      - {id: outbox-empty, type: outboxEmpty, service: order-workflow}
+  observations:
+    - id: order-version
+      sql:
+        queryFile: queries/order-version.sql
+        orderBy: [aggregate_id]
+        mode: ordered
+  invariants: []
+  normalization: []
+  limits: {maxSteps: 100, maxEvents: 100, maxRunDuration: 6m, confirmationAttempts: 2, minimizationTrials: 100, minimizationDuration: 10m}

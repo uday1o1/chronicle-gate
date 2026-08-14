@@ -54,6 +54,24 @@ type Delivery struct {
 	Key       string `json:"key"`
 }
 
+// AggregateTransition is append-only evidence of one controlled domain event.
+type AggregateTransition struct {
+	Sequence            int64  `json:"sequence"`
+	EventID             string `json:"eventId"`
+	AggregateID         string `json:"aggregateId"`
+	EventType           string `json:"eventType"`
+	EventTime           string `json:"eventTime"`
+	DeliveryLogicalTime string `json:"deliveryLogicalTime"`
+	AggregateVersion    int64  `json:"aggregateVersion"`
+	PriorVersion        int64  `json:"priorVersion"`
+	ResultingVersion    int64  `json:"resultingVersion"`
+	Disposition         string `json:"disposition"`
+	ResultingStatus     string `json:"resultingStatus"`
+	SourceTopic         string `json:"sourceTopic"`
+	SourcePartition     int32  `json:"sourcePartition"`
+	SourceOffset        int64  `json:"sourceOffset"`
+}
+
 func NewManager(adminDSN, internalEndpoint, adminUser, adminPassword string) (*Manager, error) {
 	servicePassword, err := randomSecret()
 	if err != nil {
@@ -172,6 +190,34 @@ fulfillment_mode text NOT NULL,
 status text NOT NULL,
 updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 )`,
+		`CREATE TABLE order_state (
+aggregate_id text PRIMARY KEY,
+aggregate_version bigint NOT NULL CHECK (aggregate_version >= 0),
+status text NOT NULL,
+payment_received boolean NOT NULL DEFAULT false,
+inventory_received boolean NOT NULL DEFAULT false,
+watermark timestamptz NOT NULL,
+last_event_time timestamptz NOT NULL,
+updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+)`,
+		`CREATE TABLE aggregate_event_evidence (
+transition_sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+event_id text NOT NULL UNIQUE,
+aggregate_id text NOT NULL,
+event_type text NOT NULL,
+event_time timestamptz NOT NULL,
+delivery_logical_time timestamptz NOT NULL,
+aggregate_version bigint NOT NULL CHECK (aggregate_version >= 0),
+prior_version bigint NOT NULL CHECK (prior_version >= 0),
+resulting_version bigint NOT NULL CHECK (resulting_version >= 0),
+disposition text NOT NULL,
+resulting_status text NOT NULL,
+source_topic text NOT NULL,
+source_partition integer NOT NULL,
+source_offset bigint NOT NULL,
+recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+UNIQUE (source_topic, source_partition, source_offset)
+)`,
 		"RESET ROLE",
 		"REVOKE ALL ON SCHEMA public FROM PUBLIC",
 		"GRANT CONNECT ON DATABASE " + templateDatabase + " TO " + serviceRole + ", " + observerRole,
@@ -179,6 +225,7 @@ updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 		"GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO " + serviceRole,
 		"GRANT UPDATE (commit_confirmed) ON delivery_ledger TO " + serviceRole,
 		"GRANT UPDATE (event_id, fulfillment_mode, status, updated_at) ON fulfillment_projection TO " + serviceRole,
+		"GRANT UPDATE (aggregate_version, status, payment_received, inventory_received, watermark, last_event_time, updated_at) ON order_state TO " + serviceRole,
 		"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO " + serviceRole,
 		"GRANT SELECT ON ALL TABLES IN SCHEMA public TO " + observerRole,
 	}
@@ -417,6 +464,46 @@ func CountUnpublishedOutbox(ctx context.Context, dsn string) (int64, error) {
 		return 0, fmt.Errorf("count unpublished outbox rows: %w", err)
 	}
 	return count, nil
+}
+
+// AggregateTransitions returns canonical controlled-event evidence in commit order.
+func AggregateTransitions(ctx context.Context, dsn string) ([]AggregateTransition, error) {
+	connection, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("connect aggregate transition observer: %w", err)
+	}
+	defer func() { _ = connection.Close(context.Background()) }()
+	rows, err := connection.Query(ctx, `
+SELECT transition_sequence, event_id, aggregate_id, event_type,
+       event_time, delivery_logical_time, aggregate_version, prior_version,
+       resulting_version, disposition, resulting_status,
+       source_topic, source_partition, source_offset
+FROM aggregate_event_evidence
+ORDER BY transition_sequence`)
+	if err != nil {
+		return nil, fmt.Errorf("query aggregate transition evidence: %w", err)
+	}
+	defer rows.Close()
+	transitions := []AggregateTransition{}
+	for rows.Next() {
+		var transition AggregateTransition
+		var eventTime, deliveryTime time.Time
+		if err := rows.Scan(
+			&transition.Sequence, &transition.EventID, &transition.AggregateID, &transition.EventType,
+			&eventTime, &deliveryTime, &transition.AggregateVersion, &transition.PriorVersion,
+			&transition.ResultingVersion, &transition.Disposition, &transition.ResultingStatus,
+			&transition.SourceTopic, &transition.SourcePartition, &transition.SourceOffset,
+		); err != nil {
+			return nil, fmt.Errorf("scan aggregate transition evidence: %w", err)
+		}
+		transition.EventTime = eventTime.UTC().Format(time.RFC3339Nano)
+		transition.DeliveryLogicalTime = deliveryTime.UTC().Format(time.RFC3339Nano)
+		transitions = append(transitions, transition)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate aggregate transition evidence: %w", err)
+	}
+	return transitions, nil
 }
 
 func AssertObserverReadOnly(ctx context.Context, dsn string) error {

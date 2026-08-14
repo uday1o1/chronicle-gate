@@ -20,6 +20,10 @@ func main() {
 	workflowBaselineImage := flag.String("workflow-baseline-image", "", "content-addressed baseline workflow Docker image ID")
 	workflowCandidateImage := flag.String("workflow-candidate-image", "", "content-addressed R2 workflow Docker image ID")
 	effectSinkImage := flag.String("effect-sink-image", "", "content-addressed effect sink Docker image ID")
+	stateBaselineImage := flag.String("state-baseline-image", "", "content-addressed controlled workflow baseline Docker image ID")
+	stateR3Image := flag.String("state-r3-image", "", "content-addressed R3 workflow Docker image ID")
+	stateR5Image := flag.String("state-r5-image", "", "content-addressed R5 workflow Docker image ID")
+	stateR6Image := flag.String("state-r6-image", "", "content-addressed R6 workflow Docker image ID")
 	output := flag.String("out", "examples/order-lifecycle/targets/generated", "generated target directory")
 	flag.Parse()
 
@@ -27,6 +31,7 @@ func main() {
 		"baseline": *baselineImage, "candidate": *candidateImage, "flaky": *flakyImage,
 		"R4 baseline": *r4BaselineImage, "R4 candidate": *r4CandidateImage,
 		"workflow baseline": *workflowBaselineImage, "workflow candidate": *workflowCandidateImage, "effect sink": *effectSinkImage,
+		"state baseline": *stateBaselineImage, "state R3": *stateR3Image, "state R5": *stateR5Image, "state R6": *stateR6Image,
 	} {
 		if !imagelock.IsLocalImageID(image) {
 			fatalf("%s image %q is not an exact sha256 Docker image ID", name, image)
@@ -56,6 +61,41 @@ func main() {
 	if err := writePreciseTarget(filepath.Join(*output, "r2-candidate.yaml"), *workflowCandidateImage, *effectSinkImage); err != nil {
 		fatalf("write R2 candidate target: %v", err)
 	}
+	for name, image := range map[string]string{
+		"state-baseline.yaml":     *stateBaselineImage,
+		"state-r3-candidate.yaml": *stateR3Image,
+		"state-r5-candidate.yaml": *stateR5Image,
+		"state-r6-candidate.yaml": *stateR6Image,
+	} {
+		if err := writeControlledTarget(filepath.Join(*output, name), image); err != nil {
+			fatalf("write controlled target %s: %v", name, err)
+		}
+	}
+}
+
+func writeControlledTarget(path, image string) error {
+	target := spec.Target{
+		APIVersion: spec.APIVersion,
+		Kind:       "Target",
+		Metadata:   spec.Metadata{Name: "order-lifecycle-controlled", Description: "Repository-trusted controlled order-state workflow."},
+		Spec: spec.TargetSpec{
+			DatabaseSchemaVersion: "order-lifecycle-v2",
+			Services: []spec.Service{{
+				Name: "order-workflow", Image: image, Command: []string{}, Args: []string{}, Environment: map[string]string{}, SecretEnvironment: map[string]string{},
+				Health: spec.Health{Type: "http", Path: "/healthz", Port: 8080, Timeout: duration("20s"), Interval: duration("250ms")},
+				Probe: spec.ProbeDeclaration{
+					Enabled: true, ProtocolVersion: "chronicle-probe/v1alpha1", CommitMode: "manual_sync", MaxControlledInFlight: 2,
+					Checkpoints: []string{"before_handler", "after_db_commit", "before_offset_commit", "after_offset_commit"}, LogicalClock: true,
+				},
+				Resources: spec.Resources{CPUs: 1, MemoryBytes: 256 << 20, PIDs: 128}, Dependencies: []string{},
+			}},
+		},
+	}
+	document, err := yaml.Marshal(target)
+	if err != nil {
+		return fmt.Errorf("marshal controlled target: %w", err)
+	}
+	return os.WriteFile(path, document, 0o600)
 }
 
 func writePreciseTarget(path, workflowImage, effectSinkImage string) error {
@@ -65,7 +105,7 @@ func writePreciseTarget(path, workflowImage, effectSinkImage string) error {
 		Kind:       "Target",
 		Metadata:   spec.Metadata{Name: "order-lifecycle-r2", Description: "Repository-trusted local precise crash target."},
 		Spec: spec.TargetSpec{
-			DatabaseSchemaVersion: "order-lifecycle-v1",
+			DatabaseSchemaVersion: "order-lifecycle-v2",
 			Services: []spec.Service{
 				{
 					Name: "order-workflow", Image: workflowImage, Command: []string{}, Args: []string{}, Environment: map[string]string{}, SecretEnvironment: map[string]string{},
@@ -94,7 +134,7 @@ func writeTarget(path string, image string) error {
 		Kind:       "Target",
 		Metadata:   spec.Metadata{Name: "order-lifecycle", Description: "Repository-trusted local R1 projector image."},
 		Spec: spec.TargetSpec{
-			DatabaseSchemaVersion: "order-lifecycle-v1",
+			DatabaseSchemaVersion: "order-lifecycle-v2",
 			Services: []spec.Service{{
 				Name:              "fulfillment-projector",
 				Image:             image,

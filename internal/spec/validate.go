@@ -26,6 +26,7 @@ var reservedEnvironment = map[string]struct{}{
 	"CHRONICLE_RUN_ID": {}, "CHRONICLE_ATTEMPT_ID": {}, "CHRONICLE_LOGICAL_CLOCK_SEED": {},
 	"CHRONICLE_LOGICAL_CLOCK_CURRENT": {}, "CHRONICLE_DATABASE_DSN_FILE": {}, "CHRONICLE_PROBE_TOKEN_FILE": {},
 	"CHRONICLE_EFFECT_SINK_URL": {}, "CHRONICLE_CONTROLLED_STEP_ID": {},
+	"CHRONICLE_CONTROLLED_CONFIG_FILE": {},
 	"CHRONICLE_SINK_WRITER_TOKEN_FILE": {}, "CHRONICLE_SINK_OBSERVER_TOKEN_FILE": {},
 }
 
@@ -258,6 +259,12 @@ func ValidateScenarioAndTargetWithOptions(scenario Scenario, target Target, root
 	for index, step := range scenario.Spec.Steps {
 		if step.AdvanceClock == nil {
 			continue
+		}
+		if step.AdvanceClock.By.Duration <= 0 {
+			validator.add(fmt.Sprintf("/spec/steps/%d/advanceClock/by", index), "logical_clock_advance", "logical clock advances must be positive")
+		}
+		if scenario.Spec.Clock.Start == "" {
+			validator.add(fmt.Sprintf("/spec/steps/%d/advanceClock", index), "logical_clock_seed", "logical clock advancement requires an authored clock start")
 		}
 		for _, service := range target.Spec.Services {
 			if service.Probe.Enabled && !service.Probe.LogicalClock {

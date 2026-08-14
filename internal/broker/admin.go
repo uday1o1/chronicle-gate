@@ -149,6 +149,38 @@ func (admin *Admin) RequireGroupMember(ctx context.Context, group, clientID stri
 	return nil
 }
 
+// WaitGroupAssignment proves one fresh controlled group has exactly the expected
+// client and one topic-partition assignment before any record is published.
+func (admin *Admin) WaitGroupAssignment(ctx context.Context, group, clientID, topic string, partition int32) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	var last string
+	for {
+		described, err := admin.kadm.DescribeGroups(ctx, group)
+		if err == nil {
+			description, exists := described[group]
+			if exists && description.Err == nil && len(description.Members) == 1 && description.Members[0].ClientID == clientID {
+				assigned := description.AssignedPartitions()
+				count := 0
+				assigned.Each(func(_ string, _ int32) { count++ })
+				if count == 1 && assigned.Lookup(topic, partition) {
+					return nil
+				}
+				last = fmt.Sprintf("assignment count=%d expected=%s[%d]", count, topic, partition)
+			} else if exists {
+				last = fmt.Sprintf("members=%d error=%v", len(description.Members), description.Err)
+			}
+		} else {
+			last = err.Error()
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for exact assignment of group %q to client %q (%s): %w", group, clientID, last, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
 func (admin *Admin) WaitGroupEmpty(ctx context.Context, group string) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()

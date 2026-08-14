@@ -3,8 +3,8 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestones 0 through 5 are complete, including the portfolio-ready core checkpoint and the complete V1 observer model.
-Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, and schema-compatible R4 default drift pass their local acceptance gates.
+Milestones 0 through 6 are complete, including the portfolio-ready core checkpoint, the complete V1 observer model, and the controlled cross-stream and event-time corpus.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, schema-compatible R4 default drift, stale-version R3, cross-stream R5, and late-event R6 pass their local acceptance gates.
 
 ## Bootstrap
 
@@ -47,7 +47,7 @@ All checked-in scenario, target, workload, result, and bundle examples pass both
 
 The R1 walkthrough requires Docker with at least 4 CPUs, 6 GiB of memory, and the locked Redpanda and PostgreSQL images available for the local architecture.
 The reference image build is a repository-trusted development workflow and runs before `chronicle run`.
-It creates distinct correct and seeded-defect images for R1, R2, and R4, creates the local effect sink, and generates ignored target manifests containing exact image IDs.
+It creates distinct correct and seeded-defect images for R1 through R6, creates the local effect sink, and generates ignored target manifests containing exact image IDs.
 
 ```sh
 make reference-images
@@ -172,6 +172,60 @@ The explicit-default control must pass with exit code `0` even though it include
 ```
 
 See [`docs/observer-model.md`](docs/observer-model.md) for observer comparison, Kafka range, normalization, and schema-classification boundaries.
+
+## Run the controlled R3, R5, and R6 corpus
+
+The controlled executor initializes every empty consumer group before service launch, proves each expected client assignment, and executes exact `before_handler` checkpoint schedules.
+Each consumer has one-record processing capacity, while the shared probe advertises capacity two so two separate-topic handlers can be blocked concurrently.
+Every release is followed by an independent committed-offset read before the next controlled action.
+
+R3 publishes version `2` at offset `0`, waits for its commit, and then publishes stale version `1` at offset `1` on the same partition.
+No broker reorder is requested or claimed.
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r3-stale-aggregate-overwrite.yaml \
+  --baseline examples/order-lifecycle/targets/generated/state-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/state-r3-candidate.yaml \
+  --out run/r3 \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+R5 blocks payment and inventory handlers on two distinct logical topics, proves both are blocked, and releases them in each authored legal order.
+Payment-first is the nearby passing control.
+Inventory-first exposes the seeded lost-transition defect without claiming control over partitions within one topic.
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r5-inventory-first-regression.yaml \
+  --baseline examples/order-lifecycle/targets/generated/state-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/state-r5-candidate.yaml \
+  --out run/r5 \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+R6 commits an active state, advances the authenticated logical clock from `12:00Z` to `13:00Z`, and then physically publishes a version `2` cancellation whose CloudEvent time is `11:00Z`.
+The version is monotonically valid, so the result isolates event-time lateness from R3 stale-version handling.
+Text, JSON, JUnit, and HTML reports show physical delivery sequence, CloudEvent event time, and logical delivery time as separate evidence.
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r6-late-cancellation.yaml \
+  --baseline examples/order-lifecycle/targets/generated/state-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/state-r6-candidate.yaml \
+  --out run/r6 \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+All three seeded defects return exit code `2` only after two matching confirmation attempts.
+The R3 monotonic-version, R5 payment-first, and R6 on-time cancellation controls return exit code `0`.
+See [`docs/controlled-schedules.md`](docs/controlled-schedules.md) for the schedule validity and evidence contract.
 
 ## License
 

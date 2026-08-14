@@ -1,6 +1,6 @@
 # Order lifecycle seeded qualifications
 
-This example qualifies inventory projection, precise external-effect crash, and schema-default invariants against correct baselines and seeded candidates.
+This example qualifies inventory projection, precise external-effect crash, schema-default, aggregate-version, cross-stream, and event-time invariants against correct baselines and seeded candidates.
 
 ## What the run proves
 
@@ -77,7 +77,32 @@ Timestamp fields are normalized only at exact authored JSON Pointers, and every 
 
 The generated local image IDs are content-addressed but not registry-resolvable or cross-platform portable.
 They are accepted only with `--development-local-images`.
-Cross-stream ordering, late-event, and outbox scenarios remain extended V1 work in Milestones 6 and 7.
+The R5 executor controls handler release across two distinct logical topics and does not implement or claim within-partition reordering.
+Outbox crash scenarios remain extended V1 work in Milestone 7.
+
+## R3, R5, and R6 controlled schedules
+
+The controlled state workflow uses a content-addressed private runtime contract that maps logical topic plus event ID to the exact probe step.
+The service runs one independent manual-commit consumer per logical topic.
+Each group is initialized at offset `0` while empty and must contain exactly the expected assigned client before publication begins.
+
+R3 processes the newer version completely before the stale version is armed and published on the same topic and partition.
+The baseline retains version `2` with disposition `ignored_stale`.
+The candidate persists version `1` and produces the checked-in `order-version` signature.
+The monotonic version `2` to version `3` scenario is the nearby passing control.
+
+R5 arms payment and inventory on distinct topics, publishes both, waits until both exact handlers are blocked, and then releases the authored order.
+Payment-first reaches `ready` for both targets.
+Inventory-first leaves only the candidate in `payment_received` and produces the checked-in `order-status` signature.
+Transition sequence and source broker identity prove that database commit order matches release order.
+
+R6 commits version `1`, proves quiescence for the full stability window, journals the intended clock advance, and requires the probe to acknowledge the exact watermark before publishing version `2`.
+The late cancellation has event time `11:00Z`, acknowledged watermark `13:00Z`, and logical delivery time `13:00Z`.
+The baseline records `ignored_late`, while the candidate applies `cancelled`.
+The on-time cancellation scenario is the nearby passing control.
+
+Every controlled regression bundle is replayed after its source baseline and candidate images are deleted.
+The report renderers retain the physical order and both time domains without treating attempt-prefixed topics as semantic equality inputs.
 
 ## Stable reduction and replay
 

@@ -96,34 +96,41 @@ type EnvironmentEvidence struct {
 }
 
 type AttemptEvidence struct {
-	AttemptID              string                        `json:"attemptId"`
-	Role                   string                        `json:"role"`
-	Status                 string                        `json:"status"`
-	Database               string                        `json:"database"`
-	Topic                  string                        `json:"topic"`
-	Group                  string                        `json:"group"`
-	AuthoredImage          string                        `json:"authoredImage"`
-	ExecutedImageID        string                        `json:"executedImageId,omitempty"`
-	Published              broker.RecordIdentity         `json:"published"`
-	Publications           []broker.RecordIdentity       `json:"publications"`
-	Deliveries             []database.Delivery           `json:"deliveries"`
-	Rewind                 broker.RewindEvidence         `json:"rewind"`
-	GroupInitialization    broker.InitializationEvidence `json:"groupInitialization,omitempty"`
-	ProbeCapabilities      []probe.Capabilities          `json:"probeCapabilities,omitempty"`
-	ProbeDeliveries        []probe.DeliveryReceipt       `json:"probeDeliveries,omitempty"`
-	CheckpointMode         string                        `json:"checkpointMode,omitempty"`
-	CommittedWhileBlocked  *int64                        `json:"committedWhileBlocked,omitempty"`
-	FinalCommitted         *int64                        `json:"finalCommitted,omitempty"`
-	Effects                *effects.Observation          `json:"effects,omitempty"`
-	Observations           []observe.Evidence            `json:"observations,omitempty"`
-	Registry               []registry.Evidence           `json:"registry,omitempty"`
-	Quiescence             *QuiescenceEvidence           `json:"quiescence,omitempty"`
-	SchemaAfterHealth      string                        `json:"schemaAfterHealth,omitempty"`
-	SchemaAfterObservation string                        `json:"schemaAfterObservation,omitempty"`
-	ObservationRows        []map[string]any              `json:"observationRows"`
-	InvariantRows          []map[string]any              `json:"invariantRows"`
-	Signature              *FailureSignature             `json:"signature,omitempty"`
-	Error                  string                        `json:"error,omitempty"`
+	AttemptID               string                                   `json:"attemptId"`
+	Role                    string                                   `json:"role"`
+	Status                  string                                   `json:"status"`
+	Database                string                                   `json:"database"`
+	Topic                   string                                   `json:"topic"`
+	Group                   string                                   `json:"group"`
+	AuthoredImage           string                                   `json:"authoredImage"`
+	ExecutedImageID         string                                   `json:"executedImageId,omitempty"`
+	Published               broker.RecordIdentity                    `json:"published"`
+	Publications            []broker.RecordIdentity                  `json:"publications"`
+	Deliveries              []database.Delivery                      `json:"deliveries"`
+	Rewind                  broker.RewindEvidence                    `json:"rewind"`
+	GroupInitialization     broker.InitializationEvidence            `json:"groupInitialization,omitempty"`
+	GroupInitializations    map[string]broker.InitializationEvidence `json:"groupInitializations,omitempty"`
+	ProbeCapabilities       []probe.Capabilities                     `json:"probeCapabilities,omitempty"`
+	ProbeDeliveries         []probe.DeliveryReceipt                  `json:"probeDeliveries,omitempty"`
+	CheckpointMode          string                                   `json:"checkpointMode,omitempty"`
+	ControlMode             string                                   `json:"controlMode,omitempty"`
+	ControlledConfigSHA256  string                                   `json:"controlledConfigSha256,omitempty"`
+	ControlledTopology      []ControlledStreamEvidence               `json:"controlledTopology,omitempty"`
+	CheckpointReleases      []CheckpointReleaseEvidence              `json:"checkpointReleases,omitempty"`
+	LogicalClockTransitions []LogicalClockTransition                 `json:"logicalClockTransitions,omitempty"`
+	AggregateTransitions    []database.AggregateTransition           `json:"aggregateTransitions,omitempty"`
+	CommittedWhileBlocked   *int64                                   `json:"committedWhileBlocked,omitempty"`
+	FinalCommitted          *int64                                   `json:"finalCommitted,omitempty"`
+	Effects                 *effects.Observation                     `json:"effects,omitempty"`
+	Observations            []observe.Evidence                       `json:"observations,omitempty"`
+	Registry                []registry.Evidence                      `json:"registry,omitempty"`
+	Quiescence              *QuiescenceEvidence                      `json:"quiescence,omitempty"`
+	SchemaAfterHealth       string                                   `json:"schemaAfterHealth,omitempty"`
+	SchemaAfterObservation  string                                   `json:"schemaAfterObservation,omitempty"`
+	ObservationRows         []map[string]any                         `json:"observationRows"`
+	InvariantRows           []map[string]any                         `json:"invariantRows"`
+	Signature               *FailureSignature                        `json:"signature,omitempty"`
+	Error                   string                                   `json:"error,omitempty"`
 }
 
 type QuiescenceEvidence struct {
@@ -134,6 +141,38 @@ type QuiescenceEvidence struct {
 	EffectPending         int                   `json:"effectPending"`
 	ProcessedEvents       int64                 `json:"processedEvents"`
 	CommittedOffset       int64                 `json:"committedOffset"`
+	CommittedOffsets      map[string]int64      `json:"committedOffsets,omitempty"`
+	AggregateEvents       int64                 `json:"aggregateEvents,omitempty"`
+}
+
+// ControlledStreamEvidence separates service-wide checkpoint capacity from the
+// independently assigned one-record consumer capacity.
+type ControlledStreamEvidence struct {
+	LogicalTopic     string `json:"logicalTopic"`
+	PhysicalTopic    string `json:"physicalTopic"`
+	Partition        int32  `json:"partition"`
+	Group            string `json:"group"`
+	ClientID         string `json:"clientId"`
+	ProbeCapacity    int    `json:"probeCapacity"`
+	ConsumerCapacity int    `json:"consumerCapacity"`
+}
+
+type CheckpointReleaseEvidence struct {
+	Order           int              `json:"order"`
+	Checkpoint      probe.Checkpoint `json:"checkpoint"`
+	Topic           string           `json:"topic"`
+	Partition       int32            `json:"partition"`
+	Offset          int64            `json:"offset"`
+	Group           string           `json:"group"`
+	CommittedOffset int64            `json:"committedOffset"`
+}
+
+type LogicalClockTransition struct {
+	StepID       string `json:"stepId"`
+	From         string `json:"from"`
+	By           string `json:"by"`
+	Intended     string `json:"intended"`
+	Acknowledged string `json:"acknowledged"`
 }
 
 type FailureSignature struct {
@@ -181,6 +220,10 @@ func (failure *infrastructureFailure) Unwrap() error {
 }
 
 func ValidateVerticalSlice(scenario spec.Scenario, target spec.Target) error {
+	if isControlledScenario(scenario) {
+		_, err := buildControlledPlan(scenario, target)
+		return err
+	}
 	if isPreciseScenario(scenario) {
 		_, err := buildPrecisePlan(scenario, target)
 		return err
@@ -303,12 +346,16 @@ func Run(ctx context.Context, config Config) (report Report) {
 		finalizeRun(config.Output, &report, journal, nil)
 		return report
 	}
-	precise := isPreciseScenario(config.Scenario)
-	general := isGeneralObserverScenario(config.Scenario)
+	controlled := isControlledScenario(config.Scenario)
+	precise := !controlled && isPreciseScenario(config.Scenario)
+	general := !controlled && isGeneralObserverScenario(config.Scenario)
 	var plan verticalPlan
+	var baselineControlledPlan controlledPlan
 	var baselinePrecisePlan precisePlan
 	var baselineGeneralPlan generalPlan
-	if precise {
+	if controlled {
+		baselineControlledPlan, err = buildControlledPlan(config.Scenario, config.Baseline)
+	} else if precise {
 		baselinePrecisePlan, err = buildPrecisePlan(config.Scenario, config.Baseline)
 	} else if general {
 		baselineGeneralPlan, err = buildGeneralPlan(config.Scenario, config.Baseline)
@@ -371,7 +418,12 @@ func Run(ctx context.Context, config Config) (report Report) {
 	}
 	if err == nil {
 		var baseline AttemptEvidence
-		if precise {
+		if controlled {
+			baseline, err = executeControlledAttempt(runContext, controlledAttemptConfig{
+				RunID: report.RunID, Index: 0, Role: "baseline", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+				Plan: baselineControlledPlan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
+			})
+		} else if precise {
 			baseline, err = executePreciseAttempt(runContext, preciseAttemptConfig{
 				RunID: report.RunID, Index: 0, Role: "baseline", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
 				Plan: baselinePrecisePlan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
@@ -390,7 +442,9 @@ func Run(ctx context.Context, config Config) (report Report) {
 		report.Baseline = &baseline
 		if err == nil && len(baseline.InvariantRows) != 0 {
 			invariantID := plan.invariant.ID
-			if precise {
+			if controlled && len(baselineControlledPlan.invariants) != 0 {
+				invariantID = baselineControlledPlan.invariants[0].ID
+			} else if precise {
 				invariantID = baselinePrecisePlan.invariant.ID
 			} else if general && len(baselineGeneralPlan.invariants) != 0 {
 				invariantID = baselineGeneralPlan.invariants[0].ID
@@ -411,10 +465,13 @@ func Run(ctx context.Context, config Config) (report Report) {
 	}
 	if err == nil {
 		var candidatePlan verticalPlan
+		var candidateControlledPlan controlledPlan
 		var candidatePrecisePlan precisePlan
 		var candidateGeneralPlan generalPlan
 		var planErr error
-		if precise {
+		if controlled {
+			candidateControlledPlan, planErr = buildControlledPlan(config.Scenario, config.Candidate)
+		} else if precise {
 			candidatePrecisePlan, planErr = buildPrecisePlan(config.Scenario, config.Candidate)
 		} else if general {
 			candidateGeneralPlan, planErr = buildGeneralPlan(config.Scenario, config.Candidate)
@@ -428,7 +485,13 @@ func Run(ctx context.Context, config Config) (report Report) {
 			for index := 0; index < attempts && err == nil; index++ {
 				var attempt AttemptEvidence
 				var attemptErr error
-				if precise {
+				if controlled {
+					attempt, attemptErr = executeControlledAttempt(runContext, controlledAttemptConfig{
+						RunID: report.RunID, Index: index, Role: "candidate", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+						Plan: candidateControlledPlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal,
+						SecretValues: secretValues, Baseline: report.Baseline,
+					})
+				} else if precise {
 					attempt, attemptErr = executePreciseAttempt(runContext, preciseAttemptConfig{
 						RunID: report.RunID, Index: index, Role: "candidate", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
 						Plan: candidatePrecisePlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
@@ -469,7 +532,7 @@ func Run(ctx context.Context, config Config) (report Report) {
 	if err != nil && report.Error == "" {
 		report.fail(classifyOperationalError(err), err)
 	}
-	if err == nil && report.Classification == "SEMANTIC_REGRESSION" && !config.NoMinimize && !precise && !general {
+	if err == nil && report.Classification == "SEMANTIC_REGRESSION" && !config.NoMinimize && !controlled && !precise && !general {
 		if transitionErr := transition(journal, &report, "MINIMIZING"); transitionErr != nil {
 			report.fail("INFRASTRUCTURE_ERROR", transitionErr)
 		} else {

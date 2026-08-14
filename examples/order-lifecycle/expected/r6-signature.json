@@ -1,0 +1,10 @@
+{
+  "invariantId": "order-status",
+  "classification": "SEMANTIC_REGRESSION",
+  "observationId": "order-status",
+  "rowKey": "",
+  "pointer": "/rows/0/status",
+  "expected": "active",
+  "actual": "cancelled",
+  "digest": "022eb460fefdb25079faba076eae57fbe98ddad6b51d4950cab87ffd088685d0"
+}

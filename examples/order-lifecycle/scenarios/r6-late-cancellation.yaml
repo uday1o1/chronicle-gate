@@ -1,0 +1,81 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: late-cancellation-mishandling
+  description: A physically later cancellation with valid version but older event time must be rejected.
+spec:
+  seed: {}
+  clock: {start: "2026-08-13T12:00:00Z"}
+  control: {mode: event-time, expectLate: true}
+  events:
+    active:
+      specversion: "1.0"
+      id: order-active-v1
+      source: /orders/order-1
+      type: dev.chronicle.order.updated
+      subject: order-1
+      time: "2026-08-13T12:00:00Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 1
+      data: {status: active}
+    cancellation:
+      specversion: "1.0"
+      id: order-cancelled-v2-late
+      source: /orders/order-1
+      type: dev.chronicle.order.cancelled
+      subject: order-1
+      time: "2026-08-13T11:00:00Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 2
+      data: {reason: customer-request}
+  steps:
+    - id: arm-active
+      armCheckpoint: {service: order-workflow, name: before_handler, eventId: order-active-v1, stepId: publish-active, occurrence: 1}
+    - id: publish-active
+      dependsOn: [arm-active]
+      publish: {event: active, topic: order-lifecycle, partition: 0, key: order-1}
+    - id: await-active
+      dependsOn: [publish-active]
+      timeout: 20s
+      await:
+        checkpoint: {service: order-workflow, name: before_handler, eventId: order-active-v1, stepId: publish-active, occurrence: 1}
+    - id: release-active
+      dependsOn: [await-active]
+      releaseCheckpoint: {service: order-workflow, name: before_handler, eventId: order-active-v1, stepId: publish-active, occurrence: 1}
+    - id: advance-watermark
+      dependsOn: [release-active]
+      advanceClock: {by: 1h}
+    - id: arm-cancellation
+      dependsOn: [advance-watermark]
+      armCheckpoint: {service: order-workflow, name: before_handler, eventId: order-cancelled-v2-late, stepId: publish-cancellation, occurrence: 1}
+    - id: publish-cancellation
+      dependsOn: [arm-cancellation]
+      publish: {event: cancellation, topic: order-lifecycle, partition: 0, key: order-1}
+    - id: await-cancellation
+      dependsOn: [publish-cancellation]
+      timeout: 20s
+      await:
+        checkpoint: {service: order-workflow, name: before_handler, eventId: order-cancelled-v2-late, stepId: publish-cancellation, occurrence: 1}
+    - id: release-cancellation
+      dependsOn: [await-cancellation]
+      releaseCheckpoint: {service: order-workflow, name: before_handler, eventId: order-cancelled-v2-late, stepId: publish-cancellation, occurrence: 1}
+    - id: observe-status
+      dependsOn: [release-cancellation]
+      timeout: 15s
+      observe: {observation: order-status}
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 1s
+    conditions:
+      - {id: lifecycle-lag, type: groupLagZero, group: order-workflow.order-lifecycle}
+      - {id: workflow-idle, type: probeIdle, service: order-workflow}
+      - {id: checkpoints-clear, type: checkpointsClear, service: order-workflow}
+      - {id: outbox-empty, type: outboxEmpty, service: order-workflow}
+  observations:
+    - id: order-status
+      sql: {queryFile: queries/order-status.sql, orderBy: [aggregate_id], mode: ordered}
+  invariants: []
+  normalization: []
+  limits: {maxSteps: 100, maxEvents: 100, maxRunDuration: 6m, confirmationAttempts: 2, minimizationTrials: 100, minimizationDuration: 10m}

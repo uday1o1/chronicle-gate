@@ -95,3 +95,40 @@ func TestNormalizationSummaryIsIdempotentAcrossReportRoundTrips(t *testing.T) {
 		t.Fatalf("normalization summaries after round trip = %d, want 1", len(roundTrip.Normalizations))
 	}
 }
+
+func TestEveryRendererSeparatesEventTimeFromPhysicalDelivery(t *testing.T) {
+	attempt := json.RawMessage(`{
+  "attemptId":"candidate-0",
+  "controlMode":"event-time",
+  "aggregateTransitions":[{
+    "sequence":2,
+    "eventId":"cancel-late",
+    "eventTime":"2026-08-13T11:00:00Z",
+    "deliveryLogicalTime":"2026-08-13T13:00:00Z",
+    "aggregateVersion":2,
+    "disposition":"applied",
+    "resultingStatus":"cancelled",
+    "sourceTopic":"cg.run.candidate.order-lifecycle",
+    "sourcePartition":0,
+    "sourceOffset":1
+  }]
+}`)
+	value := Document{
+		APIVersion: "chronicle.dev/v1alpha1", Kind: "Result", RunID: "run-1", State: "COMPLETE",
+		Classification: "SEMANTIC_REGRESSION", Candidate: []json.RawMessage{attempt},
+	}
+	for _, format := range []string{"json", "text", "junit", "html"} {
+		document, err := Render(value, format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, expected := range [][]byte{
+			[]byte("2026-08-13T11:00:00Z"), []byte("2026-08-13T13:00:00Z"),
+			[]byte("cancel-late"), []byte("order-lifecycle"),
+		} {
+			if !bytes.Contains(document, expected) {
+				t.Fatalf("%s report omits controlled temporal evidence %q: %s", format, expected, document)
+			}
+		}
+	}
+}

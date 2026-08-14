@@ -153,6 +153,48 @@ func TestBlockedCheckpointHonorsCancellation(t *testing.T) {
 	}
 }
 
+func TestTwoIndependentHandlersBlockAndReleaseConcurrently(t *testing.T) {
+	t.Parallel()
+	p := New(
+		WithEnabled(true), WithToken(testToken), WithClockStart(time.Now().UTC()),
+		WithCapabilities(Capabilities{
+			Service: "order-workflow", CommitMode: "manual_sync", MaxControlledInFlight: 2,
+			Checkpoints: []string{"before_handler"}, LogicalClock: true,
+		}),
+	)
+	server := httptest.NewServer(p.Handler())
+	defer server.Close()
+	capabilities := getCapabilities(t, server.URL, testToken)
+	checkpoints := []Checkpoint{
+		{Name: "before_handler", Service: "order-workflow", EventID: "payment-1", StepID: "publish-payment", Occurrence: 1},
+		{Name: "before_handler", Service: "order-workflow", EventID: "inventory-1", StepID: "publish-inventory", Occurrence: 1},
+	}
+	states := make([]CheckpointState, len(checkpoints))
+	done := make(chan string, len(checkpoints))
+	for index, checkpoint := range checkpoints {
+		states[index] = checkpointCall(t, server.URL+"/v1/checkpoints/arm", testToken, http.StatusCreated, checkpointRequest{InstanceID: capabilities.InstanceID, Checkpoint: checkpoint})
+		current := checkpoint
+		go func() {
+			if err := p.Enter(context.Background(), current); err != nil {
+				done <- "error"
+				return
+			}
+			done <- current.EventID
+		}()
+	}
+	for _, state := range states {
+		waitState(t, server.URL, testToken, state, "blocked")
+	}
+	checkpointCall(t, server.URL+"/v1/checkpoints/release", testToken, http.StatusOK, checkpointRequest{InstanceID: states[1].InstanceID, Handle: states[1].Handle, Checkpoint: states[1].Checkpoint})
+	if got := <-done; got != "inventory-1" {
+		t.Fatalf("first release completed %q", got)
+	}
+	checkpointCall(t, server.URL+"/v1/checkpoints/release", testToken, http.StatusOK, checkpointRequest{InstanceID: states[0].InstanceID, Handle: states[0].Handle, Checkpoint: states[0].Checkpoint})
+	if got := <-done; got != "payment-1" {
+		t.Fatalf("second release completed %q", got)
+	}
+}
+
 func testProbe(t *testing.T, start time.Time) *Probe {
 	t.Helper()
 	p := New(

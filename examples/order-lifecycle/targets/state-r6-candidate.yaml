@@ -1,0 +1,32 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Target
+metadata:
+  name: order-lifecycle-controlled
+  description: Seeded late cancellation mishandling workflow.
+spec:
+  databaseSchemaVersion: order-lifecycle-v2
+  services:
+    - name: order-workflow
+      image: ghcr.io/example/state-workflow@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health:
+        type: http
+        path: /healthz
+        port: 8080
+        timeout: 20s
+        interval: 250ms
+      probe:
+        enabled: true
+        protocolVersion: chronicle-probe/v1alpha1
+        commitMode: manual_sync
+        maxControlledInFlight: 2
+        checkpoints: [before_handler, after_db_commit, before_offset_commit, after_offset_commit]
+        logicalClock: true
+      resources:
+        cpus: 1
+        memoryBytes: 268435456
+        pids: 128
+      dependencies: []

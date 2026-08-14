@@ -62,6 +62,7 @@ type Document struct {
 	Replay            json.RawMessage   `json:"replay,omitempty"`
 	Metadata          map[string]any    `json:"metadata,omitempty"`
 	Normalizations    []Normalization   `json:"normalizations,omitempty"`
+	ControlledEvents  []ControlledEvent `json:"controlledEvents,omitempty"`
 }
 
 type Normalization struct {
@@ -73,6 +74,23 @@ type Normalization struct {
 	Type          string `json:"type"`
 	Pointer       string `json:"pointer"`
 	AffectedCount int    `json:"affectedCount"`
+}
+
+// ControlledEvent keeps physical delivery order separate from domain event
+// time and the probe-owned logical delivery time.
+type ControlledEvent struct {
+	AttemptID           string `json:"attemptId"`
+	ControlMode         string `json:"controlMode"`
+	Sequence            int64  `json:"physicalDeliverySequence"`
+	EventID             string `json:"eventId"`
+	Topic               string `json:"topic"`
+	Partition           int32  `json:"partition"`
+	Offset              int64  `json:"offset"`
+	EventTime           string `json:"eventTime"`
+	DeliveryLogicalTime string `json:"deliveryLogicalTime"`
+	AggregateVersion    int64  `json:"aggregateVersion"`
+	Disposition         string `json:"disposition"`
+	ResultingStatus     string `json:"resultingStatus"`
 }
 
 type Violation struct {
@@ -99,7 +117,54 @@ func Decode(document []byte) (Document, error) {
 	if err := collectNormalizations(&value); err != nil {
 		return Document{}, err
 	}
+	if err := collectControlledEvents(&value); err != nil {
+		return Document{}, err
+	}
 	return value, nil
+}
+
+func collectControlledEvents(document *Document) error {
+	document.ControlledEvents = nil
+	type transition struct {
+		Sequence            int64  `json:"sequence"`
+		EventID             string `json:"eventId"`
+		EventTime           string `json:"eventTime"`
+		DeliveryLogicalTime string `json:"deliveryLogicalTime"`
+		AggregateVersion    int64  `json:"aggregateVersion"`
+		Disposition         string `json:"disposition"`
+		ResultingStatus     string `json:"resultingStatus"`
+		SourceTopic         string `json:"sourceTopic"`
+		SourcePartition     int32  `json:"sourcePartition"`
+		SourceOffset        int64  `json:"sourceOffset"`
+	}
+	type attempt struct {
+		AttemptID            string       `json:"attemptId"`
+		ControlMode          string       `json:"controlMode"`
+		AggregateTransitions []transition `json:"aggregateTransitions"`
+	}
+	values := append([]json.RawMessage{document.Baseline}, document.Candidate...)
+	for _, raw := range values {
+		if len(raw) == 0 || string(raw) == "null" {
+			continue
+		}
+		var decoded attempt
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return fmt.Errorf("decode controlled temporal evidence: %w", err)
+		}
+		for _, event := range decoded.AggregateTransitions {
+			document.ControlledEvents = append(document.ControlledEvents, ControlledEvent{
+				AttemptID: decoded.AttemptID, ControlMode: decoded.ControlMode, Sequence: event.Sequence,
+				EventID: event.EventID, Topic: event.SourceTopic, Partition: event.SourcePartition, Offset: event.SourceOffset,
+				EventTime: event.EventTime, DeliveryLogicalTime: event.DeliveryLogicalTime,
+				AggregateVersion: event.AggregateVersion, Disposition: event.Disposition, ResultingStatus: event.ResultingStatus,
+			})
+		}
+	}
+	sort.Slice(document.ControlledEvents, func(left, right int) bool {
+		a, b := document.ControlledEvents[left], document.ControlledEvents[right]
+		return a.AttemptID+fmt.Sprintf("%020d", a.Sequence) < b.AttemptID+fmt.Sprintf("%020d", b.Sequence)
+	})
+	return nil
 }
 
 func collectNormalizations(document *Document) error {
@@ -194,6 +259,11 @@ func renderText(document Document) []byte {
 	for _, rule := range document.Normalizations {
 		fmt.Fprintf(&output, "normalization: %s %s/%s/%d %s %s %s affected=%d\n", rule.AttemptID, rule.StepID, rule.ObservationID, rule.Occurrence, rule.RuleID, rule.Type, rule.Pointer, rule.AffectedCount)
 	}
+	for _, event := range document.ControlledEvents {
+		fmt.Fprintf(&output, "controlled-event: %s mode=%s physical-order=%d %s[%d]@%d event=%s event-time=%s delivery-logical-time=%s version=%d disposition=%s status=%s\n",
+			event.AttemptID, event.ControlMode, event.Sequence, event.Topic, event.Partition, event.Offset,
+			event.EventID, event.EventTime, event.DeliveryLogicalTime, event.AggregateVersion, event.Disposition, event.ResultingStatus)
+	}
 	return []byte(output.String())
 }
 
@@ -231,8 +301,8 @@ func renderJUnit(document Document) ([]byte, error) {
 		item.Error = detail
 	}
 	suite.Testcase = []testcase{item}
-	if len(document.Normalizations) != 0 {
-		summary, err := json.Marshal(document.Normalizations)
+	if len(document.Normalizations) != 0 || len(document.ControlledEvents) != 0 {
+		summary, err := json.Marshal(map[string]any{"normalizations": document.Normalizations, "controlledEvents": document.ControlledEvents})
 		if err != nil {
 			return nil, fmt.Errorf("encode JUnit normalization evidence: %w", err)
 		}
@@ -250,7 +320,8 @@ var page = template.Must(template.New("report").Parse(`<!doctype html>
 <style>body{font:16px system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#17202a}code{background:#f3f4f6;padding:.15rem .3rem}.result{border-left:.4rem solid #555;padding:1rem;background:#f8fafc}dt{font-weight:700}dd{margin-bottom:.75rem}</style></head>
 <body><h1>ChronicleGate result</h1><section class="result"><dl><dt>Run</dt><dd><code>{{.RunID}}</code></dd><dt>Classification</dt><dd>{{.Classification}}</dd><dt>State</dt><dd>{{.State}}</dd>{{if .FailureSignature}}<dt>Signature</dt><dd><code>{{.FailureSignature.Digest}}</code></dd>{{end}}{{if .Error}}<dt>Error</dt><dd>{{.Error}}</dd>{{end}}</dl></section>
 <h2>Minimization</h2><p>{{.Minimization.Status}} ({{.Minimization.Minimality}}), events {{.Minimization.OriginalEvents}} to {{.Minimization.FinalEvents}}, actions {{.Minimization.OriginalActions}} to {{.Minimization.FinalActions}}.</p>
-{{if .Normalizations}}<h2>Applied normalizations</h2><table><thead><tr><th>Attempt</th><th>Observation</th><th>Rule</th><th>Pointer</th><th>Affected</th></tr></thead><tbody>{{range .Normalizations}}<tr><td><code>{{.AttemptID}}</code></td><td><code>{{.StepID}}/{{.ObservationID}}/{{.Occurrence}}</code></td><td>{{.RuleID}} ({{.Type}})</td><td><code>{{.Pointer}}</code></td><td>{{.AffectedCount}}</td></tr>{{end}}</tbody></table>{{end}}</body></html>
+{{if .Normalizations}}<h2>Applied normalizations</h2><table><thead><tr><th>Attempt</th><th>Observation</th><th>Rule</th><th>Pointer</th><th>Affected</th></tr></thead><tbody>{{range .Normalizations}}<tr><td><code>{{.AttemptID}}</code></td><td><code>{{.StepID}}/{{.ObservationID}}/{{.Occurrence}}</code></td><td>{{.RuleID}} ({{.Type}})</td><td><code>{{.Pointer}}</code></td><td>{{.AffectedCount}}</td></tr>{{end}}</tbody></table>{{end}}
+{{if .ControlledEvents}}<h2>Controlled delivery and event time</h2><p>Physical delivery sequence is reported separately from CloudEvent event time and probe logical delivery time.</p><table><thead><tr><th>Attempt</th><th>Mode</th><th>Physical order</th><th>Broker record</th><th>Event</th><th>Event time</th><th>Delivery logical time</th><th>Version</th><th>Disposition</th><th>Status</th></tr></thead><tbody>{{range .ControlledEvents}}<tr><td><code>{{.AttemptID}}</code></td><td>{{.ControlMode}}</td><td>{{.Sequence}}</td><td><code>{{.Topic}}[{{.Partition}}]@{{.Offset}}</code></td><td><code>{{.EventID}}</code></td><td>{{.EventTime}}</td><td>{{.DeliveryLogicalTime}}</td><td>{{.AggregateVersion}}</td><td>{{.Disposition}}</td><td>{{.ResultingStatus}}</td></tr>{{end}}</tbody></table>{{end}}</body></html>
 `))
 
 func renderHTML(document Document) ([]byte, error) {

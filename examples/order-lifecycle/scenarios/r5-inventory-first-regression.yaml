@@ -1,0 +1,78 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: cross-stream-inventory-first-regression
+  description: Both handlers block before inventory is released first and payment second.
+spec:
+  seed: {}
+  clock: {start: "2026-08-13T12:00:00Z"}
+  control: {mode: cross-stream, expectLate: false}
+  events:
+    payment:
+      specversion: "1.0"
+      id: payment-confirmed-inventory-first
+      source: /orders/order-1
+      type: dev.chronicle.payment.confirmed
+      subject: order-1
+      time: "2026-08-13T12:00:00Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 1
+      data: {amount: 1250}
+    inventory:
+      specversion: "1.0"
+      id: inventory-reserved-inventory-first
+      source: /orders/order-1
+      type: dev.chronicle.inventory.reserved
+      subject: order-1
+      time: "2026-08-13T12:00:00Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 1
+      data: {sku: sku-1, quantity: 1}
+  steps:
+    - id: arm-payment
+      armCheckpoint: {service: order-workflow, name: before_handler, eventId: payment-confirmed-inventory-first, stepId: publish-payment, occurrence: 1}
+    - id: arm-inventory
+      armCheckpoint: {service: order-workflow, name: before_handler, eventId: inventory-reserved-inventory-first, stepId: publish-inventory, occurrence: 1}
+    - id: publish-payment
+      dependsOn: [arm-payment]
+      publish: {event: payment, topic: payment-events, partition: 0, key: order-1}
+    - id: publish-inventory
+      dependsOn: [arm-inventory]
+      publish: {event: inventory, topic: inventory-events, partition: 0, key: order-1}
+    - id: await-payment
+      dependsOn: [publish-payment]
+      timeout: 20s
+      await:
+        checkpoint: {service: order-workflow, name: before_handler, eventId: payment-confirmed-inventory-first, stepId: publish-payment, occurrence: 1}
+    - id: await-inventory
+      dependsOn: [publish-inventory]
+      timeout: 20s
+      await:
+        checkpoint: {service: order-workflow, name: before_handler, eventId: inventory-reserved-inventory-first, stepId: publish-inventory, occurrence: 1}
+    - id: release-inventory
+      dependsOn: [await-payment, await-inventory]
+      releaseCheckpoint: {service: order-workflow, name: before_handler, eventId: inventory-reserved-inventory-first, stepId: publish-inventory, occurrence: 1}
+    - id: release-payment
+      dependsOn: [release-inventory, await-payment]
+      releaseCheckpoint: {service: order-workflow, name: before_handler, eventId: payment-confirmed-inventory-first, stepId: publish-payment, occurrence: 1}
+    - id: observe-status
+      dependsOn: [release-payment]
+      timeout: 15s
+      observe: {observation: order-status}
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 1s
+    conditions:
+      - {id: payment-lag, type: groupLagZero, group: order-workflow.payment-events}
+      - {id: inventory-lag, type: groupLagZero, group: order-workflow.inventory-events}
+      - {id: workflow-idle, type: probeIdle, service: order-workflow}
+      - {id: checkpoints-clear, type: checkpointsClear, service: order-workflow}
+      - {id: outbox-empty, type: outboxEmpty, service: order-workflow}
+  observations:
+    - id: order-status
+      sql: {queryFile: queries/order-status.sql, orderBy: [aggregate_id], mode: ordered}
+  invariants: []
+  normalization: []
+  limits: {maxSteps: 100, maxEvents: 100, maxRunDuration: 6m, confirmationAttempts: 2, minimizationTrials: 100, minimizationDuration: 10m}

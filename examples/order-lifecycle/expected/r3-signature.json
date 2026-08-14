@@ -1,0 +1,10 @@
+{
+  "invariantId": "order-version",
+  "classification": "SEMANTIC_REGRESSION",
+  "observationId": "order-version",
+  "rowKey": "",
+  "pointer": "/rows/0/aggregate_version",
+  "expected": 2,
+  "actual": 1,
+  "digest": "299ffe3cd73f28980cc07879aaf96082b1f2b9216ba5b33325c37704cb84524a"
+}

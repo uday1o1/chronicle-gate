@@ -1,0 +1,10 @@
+{
+  "invariantId": "order-status",
+  "classification": "SEMANTIC_REGRESSION",
+  "observationId": "order-status",
+  "rowKey": "",
+  "pointer": "/rows/0/status",
+  "expected": "ready",
+  "actual": "payment_received",
+  "digest": "c2fad8b52cce868bcd572f8d8e0defc8ef1e6cf6abddf00fb1008f44c630c4c2"
+}

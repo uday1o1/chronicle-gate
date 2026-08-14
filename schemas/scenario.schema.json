@@ -23,11 +23,16 @@
         "invariants": {"type": "array", "items": {"$ref": "#/$defs/invariant"}},
         "normalization": {"type": "array", "items": {"$ref": "#/$defs/normalization"}},
         "limits": {"$ref": "#/$defs/limits"},
-        "comparison": {"$ref": "#/$defs/comparison"}
+        "comparison": {"$ref": "#/$defs/comparison"},
+        "control": {"$ref": "#/$defs/control"}
       }
     }
   },
   "$defs": {
+    "control": {
+      "type": "object", "additionalProperties": false, "required": ["mode", "expectLate"],
+      "properties": {"mode": {"enum": ["aggregate-version", "cross-stream", "event-time"]}, "expectLate": {"type": "boolean"}}
+    },
     "metadata": {
       "type": "object", "additionalProperties": false, "required": ["name"],
       "properties": {"name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}, "description": {"type": "string"}}

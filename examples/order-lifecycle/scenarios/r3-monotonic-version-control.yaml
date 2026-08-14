@@ -1,0 +1,78 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: monotonic-aggregate-version-control
+  description: A physically later higher aggregate version remains a passing control.
+spec:
+  seed: {}
+  clock: {start: "2026-08-13T12:00:00Z"}
+  control: {mode: aggregate-version, expectLate: false}
+  events:
+    confirmed:
+      specversion: "1.0"
+      id: order-confirmed-v2-control
+      source: /orders/order-1
+      type: dev.chronicle.order.updated
+      subject: order-1
+      time: "2026-08-13T12:00:00Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 2
+      data: {status: confirmed}
+    shipped:
+      specversion: "1.0"
+      id: order-shipped-v3-control
+      source: /orders/order-1
+      type: dev.chronicle.order.updated
+      subject: order-1
+      time: "2026-08-13T12:01:00Z"
+      datacontenttype: application/json
+      aggregateid: order-1
+      aggregateversion: 3
+      data: {status: shipped}
+  steps:
+    - id: arm-confirmed
+      armCheckpoint: {service: order-workflow, name: before_handler, eventId: order-confirmed-v2-control, stepId: publish-confirmed, occurrence: 1}
+    - id: publish-confirmed
+      dependsOn: [arm-confirmed]
+      publish: {event: confirmed, topic: order-updates, partition: 0, key: order-1}
+    - id: await-confirmed
+      dependsOn: [publish-confirmed]
+      timeout: 20s
+      await:
+        checkpoint: {service: order-workflow, name: before_handler, eventId: order-confirmed-v2-control, stepId: publish-confirmed, occurrence: 1}
+    - id: release-confirmed
+      dependsOn: [await-confirmed]
+      releaseCheckpoint: {service: order-workflow, name: before_handler, eventId: order-confirmed-v2-control, stepId: publish-confirmed, occurrence: 1}
+    - id: arm-shipped
+      dependsOn: [release-confirmed]
+      armCheckpoint: {service: order-workflow, name: before_handler, eventId: order-shipped-v3-control, stepId: publish-shipped, occurrence: 1}
+    - id: publish-shipped
+      dependsOn: [arm-shipped]
+      publish: {event: shipped, topic: order-updates, partition: 0, key: order-1}
+    - id: await-shipped
+      dependsOn: [publish-shipped]
+      timeout: 20s
+      await:
+        checkpoint: {service: order-workflow, name: before_handler, eventId: order-shipped-v3-control, stepId: publish-shipped, occurrence: 1}
+    - id: release-shipped
+      dependsOn: [await-shipped]
+      releaseCheckpoint: {service: order-workflow, name: before_handler, eventId: order-shipped-v3-control, stepId: publish-shipped, occurrence: 1}
+    - id: observe-version
+      dependsOn: [release-shipped]
+      timeout: 15s
+      observe: {observation: order-version}
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 1s
+    conditions:
+      - {id: order-update-lag, type: groupLagZero, group: order-workflow.order-updates}
+      - {id: workflow-idle, type: probeIdle, service: order-workflow}
+      - {id: checkpoints-clear, type: checkpointsClear, service: order-workflow}
+      - {id: outbox-empty, type: outboxEmpty, service: order-workflow}
+  observations:
+    - id: order-version
+      sql: {queryFile: queries/order-version.sql, orderBy: [aggregate_id], mode: ordered}
+  invariants: []
+  normalization: []
+  limits: {maxSteps: 100, maxEvents: 100, maxRunDuration: 6m, confirmationAttempts: 2, minimizationTrials: 100, minimizationDuration: 10m}

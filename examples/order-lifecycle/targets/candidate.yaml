@@ -4,7 +4,7 @@ metadata:
   name: order-lifecycle
   description: Correct reference projector.
 spec:
-  databaseSchemaVersion: order-lifecycle-v1
+  databaseSchemaVersion: order-lifecycle-v2
   services:
     - name: fulfillment-projector
       image: ghcr.io/example/fulfillment-projector@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

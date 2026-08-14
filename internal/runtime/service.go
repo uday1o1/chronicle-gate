@@ -112,7 +112,7 @@ func StartService(ctx context.Context, config ServiceConfig) (*ServiceRuntime, e
 		WithStartupTimeout(config.Service.Health.Timeout.Duration)
 	options := []testcontainers.ContainerCustomizer{
 		tcnetwork.WithNetwork([]string{config.Service.Name}, config.Network),
-		testcontainers.WithLabels(map[string]string{labelRun: config.RunID, "dev.chronicle.attempt": config.AttemptID}),
+		testcontainers.WithLabels(map[string]string{labelRun: config.RunID, "dev.chronicle.attempt": config.AttemptID, "dev.chronicle.service": config.Service.Name}),
 		testcontainers.WithEnv(environment),
 		testcontainers.WithExposedPorts(exposedPorts...),
 		testcontainers.WithWaitStrategy(health),
@@ -145,7 +145,8 @@ func StartService(ctx context.Context, config ServiceConfig) (*ServiceRuntime, e
 	serviceContainer, err := testcontainers.Run(ctx, config.Service.Image, options...)
 	if err != nil {
 		cleanupSecretDirectory(config.SecretDirectory, secretPaths)
-		return nil, fmt.Errorf("start target service %q: %w", config.Service.Name, err)
+		cleanupErr := cleanupFailedService(config.RunID, config.AttemptID, config.Service.Name)
+		return nil, errors.Join(fmt.Errorf("start target service %q: %w", config.Service.Name, err), cleanupErr)
 	}
 	runtime := &ServiceRuntime{Container: serviceContainer, ClientID: clientID, healthSpec: config.Service.Health, secretPaths: secretPaths, secretDirectory: config.SecretDirectory}
 	inspect, err := serviceContainer.Inspect(ctx)
@@ -159,6 +160,31 @@ func StartService(ctx context.Context, config ServiceConfig) (*ServiceRuntime, e
 		return nil, fmt.Errorf("local target image identity mismatch: authored %s, executed %s", config.Service.Image, runtime.ImageID)
 	}
 	return runtime, nil
+}
+
+func cleanupFailedService(runID, attemptID, serviceName string) error {
+	client, err := mobyclient.New(mobyclient.FromEnv)
+	if err != nil {
+		return fmt.Errorf("create Docker client for failed service cleanup: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+	filters := make(mobyclient.Filters).
+		Add("label", labelRun+"="+runID).
+		Add("label", "dev.chronicle.attempt="+attemptID).
+		Add("label", "dev.chronicle.service="+serviceName)
+	cleanupContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	listed, err := client.ContainerList(cleanupContext, mobyclient.ContainerListOptions{All: true, Filters: filters})
+	if err != nil {
+		return fmt.Errorf("list failed service containers: %w", err)
+	}
+	var cleanupErr error
+	for _, candidate := range listed.Items {
+		if _, err := client.ContainerRemove(cleanupContext, candidate.ID, mobyclient.ContainerRemoveOptions{Force: true, RemoveVolumes: true}); err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove failed service container %s: %w", candidate.ID, err))
+		}
+	}
+	return cleanupErr
 }
 
 // Kill sends SIGKILL to the service process and preserves the container for restart.
