@@ -94,11 +94,19 @@ type KafkaRange struct {
 	Records         []BrokerRecord `json:"records"`
 }
 
+type TraceContextFingerprint struct {
+	Name      string `json:"name"`
+	WireIndex int    `json:"wireIndex"`
+	SHA256    string `json:"sha256"`
+}
+
 type BrokerRecord struct {
-	Offset            int64  `json:"offset"`
-	Timestamp         string `json:"timestamp"`
-	LeaderEpoch       int32  `json:"leaderEpoch"`
-	TimestampExcluded bool   `json:"timestampExcluded"`
+	Offset                   int64                     `json:"offset"`
+	Timestamp                string                    `json:"timestamp"`
+	LeaderEpoch              int32                     `json:"leaderEpoch"`
+	TimestampExcluded        bool                      `json:"timestampExcluded"`
+	TopLevelJSONKeyOrder     []string                  `json:"topLevelJsonKeyOrder"`
+	TraceContextFingerprints []TraceContextFingerprint `json:"traceContextFingerprints"`
 }
 
 type HTTPSource struct {

@@ -3,8 +3,8 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestones 0 through 6 are complete, including the portfolio-ready core checkpoint, the complete V1 observer model, and the controlled cross-stream and event-time corpus.
-Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, schema-compatible R4 default drift, stale-version R3, cross-stream R5, and late-event R6 pass their local acceptance gates.
+Milestones 0 through 7 are complete, including the portfolio-ready core checkpoint, the complete V1 observer model, the controlled cross-stream and event-time corpus, and the connected transactional-outbox corpus.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, schema-compatible R4 default drift, stale-version R3, cross-stream R5, late-event R6, and duplicate-publication R7 pass their local acceptance gates.
 
 ## Bootstrap
 
@@ -47,7 +47,7 @@ All checked-in scenario, target, workload, result, and bundle examples pass both
 
 The R1 walkthrough requires Docker with at least 4 CPUs, 6 GiB of memory, and the locked Redpanda and PostgreSQL images available for the local architecture.
 The reference image build is a repository-trusted development workflow and runs before `chronicle run`.
-It creates distinct correct and seeded-defect images for R1 through R6, creates the local effect sink, and generates ignored target manifests containing exact image IDs.
+It creates distinct correct and seeded-defect images for R1 through R7, creates the local effect sink, and generates ignored target manifests containing exact image IDs.
 
 ```sh
 make reference-images
@@ -125,7 +125,7 @@ The nearby manual-commit control must pass with exit code `0`:
 ./bin/chronicle run \
   --scenario examples/order-lifecycle/scenarios/manual-offset-commit-control.yaml \
   --baseline examples/order-lifecycle/targets/generated/r2-baseline.yaml \
-  --candidate examples/order-lifecycle/targets/generated/r2-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/r2-candidate.yaml \
   --out run/manual-commit \
   --development-local-images \
   --no-minimize \
@@ -226,6 +226,44 @@ Text, JSON, JUnit, and HTML reports show physical delivery sequence, CloudEvent 
 All three seeded defects return exit code `2` only after two matching confirmation attempts.
 The R3 monotonic-version, R5 payment-first, and R6 on-time cancellation controls return exit code `0`.
 See [`docs/controlled-schedules.md`](docs/controlled-schedules.md) for the schedule validity and evidence contract.
+
+## Run the connected R7 outbox qualification
+
+R7 exercises the complete repository-trusted order lifecycle through the real public API and connected services.
+The flow is `POST /orders`, one orders-and-outbox transaction, synchronous relay publication, payment and inventory request and outcome streams, fulfillment projection, and a local synthetic external effect.
+
+The harness blocks the relay only after `ProduceSync` returns an exact broker identity and the acknowledgement is written to durable evidence, then sends `SIGKILL` before the outbox row is marked published.
+The restarted baseline republishes the same logical CloudEvent ID, so downstream idempotency retains one business effect.
+The seeded candidate derives a deterministic new ID only for the retry, so the same crash produces two business effects and the checked-in R7 signature.
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r7-outbox-crash-after-ack.yaml \
+  --baseline examples/order-lifecycle/targets/generated/r7-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/r7-candidate.yaml \
+  --out run/r7 \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+Exit code `2` is expected with `EXTERNAL_EFFECT_REGRESSION` and the checked-in `/entries/count` signature.
+Every attempt retains the five exact executed service images, both acknowledged outbox publications, the logical and emitted event IDs, physical topic offsets, final group positions, full quiescence proof, effect projection, and database schema fingerprints.
+
+The unrelated-orders control proves that the R7 candidate passes when two independent outbox rows each publish once:
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r7-unrelated-orders-control.yaml \
+  --baseline examples/order-lifecycle/targets/generated/r7-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/r7-candidate.yaml \
+  --out run/r7-control \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+See [`docs/outbox-qualification.md`](docs/outbox-qualification.md) for the crash-window contract, retained evidence, control matrix, and measured functional acceptance runs.
 
 ## License
 

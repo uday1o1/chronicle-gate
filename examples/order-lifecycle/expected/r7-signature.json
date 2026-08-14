@@ -1,0 +1,10 @@
+{
+  "invariantId": "capture-effects",
+  "classification": "EXTERNAL_EFFECT_REGRESSION",
+  "observationId": "capture-effects",
+  "rowKey": "effect-ledger",
+  "pointer": "/entries/count",
+  "expected": 1,
+  "actual": 2,
+  "digest": "b6a2655ffc67568d7255c2d10fd7f70c1fb037cf206c68d82bde024e7aa823c4"
+}

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,7 +53,7 @@ func main() {
 
 	brokers := splitRequired("CHRONICLE_BROKERS")
 	logicalTopic := "inventory"
-	if variant == "baseline-r4" || variant == "candidate-r4" {
+	if variant == "baseline-r4" || variant == "candidate-r4" || variant == "candidate-r4-metadata" {
 		logicalTopic = "fulfillment"
 	}
 	topic := required("CHRONICLE_TOPIC_PREFIX") + "." + logicalTopic
@@ -231,13 +233,35 @@ SET event_id = EXCLUDED.event_id, fulfillment_mode = EXCLUDED.fulfillment_mode,
 	if loggingContext, _ := event.Data["loggingContext"].(string); variant == "candidate-r4" && loggingContext == "invalid-output-schema" {
 		delete(outputEvent.Data, "status")
 	}
-	document, err := json.Marshal(outputEvent)
+	document, err := encodeFulfillmentOutput(outputEvent, variant)
 	if err != nil {
 		return 0, nil, err
 	}
 	output := &kgo.Record{Topic: required("CHRONICLE_TOPIC_PREFIX") + ".fulfillment-results", Partition: 0, Key: []byte(orderID), Value: document}
-	output.Headers = []kgo.RecordHeader{{Key: "traceparent", Value: []byte("00-" + event.ID + "-0000000000000001-01")}}
+	if variant == "baseline-r4" {
+		output.Timestamp = time.Date(2026, 8, 13, 12, 0, 3, 0, time.UTC)
+	}
+	if variant == "candidate-r4-metadata" {
+		output.Timestamp = time.Date(2026, 8, 13, 12, 0, 4, 0, time.UTC)
+	}
+	output.Headers = []kgo.RecordHeader{{Key: "traceparent", Value: []byte(traceContext(event.ID, variant))}}
 	return deliveryID, output, nil
+}
+
+func encodeFulfillmentOutput(event cloudEvent, selectedVariant string) ([]byte, error) {
+	if selectedVariant != "candidate-r4-metadata" {
+		return json.Marshal(event)
+	}
+	return json.Marshal(map[string]any{
+		"aggregateid": event.AggregateID, "data": event.Data, "datacontenttype": event.DataContentType,
+		"id": event.ID, "source": event.Source, "specversion": event.SpecVersion,
+		"subject": event.Subject, "time": event.Time, "type": event.Type,
+	})
+}
+
+func traceContext(eventID, selectedVariant string) string {
+	digest := sha256.Sum256([]byte(eventID + "\x00" + selectedVariant))
+	return "00-" + hex.EncodeToString(digest[:16]) + "-0000000000000001-01"
 }
 
 func readSecretFile(environment string) (string, error) {

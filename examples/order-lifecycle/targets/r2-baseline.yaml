@@ -4,7 +4,7 @@ metadata:
   name: order-lifecycle-r2-baseline
   description: Correct reference workflow with stable effect idempotency.
 spec:
-  databaseSchemaVersion: order-lifecycle-v2
+  databaseSchemaVersion: order-lifecycle-v3
   services:
     - name: order-workflow
       image: ghcr.io/example/order-workflow@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc

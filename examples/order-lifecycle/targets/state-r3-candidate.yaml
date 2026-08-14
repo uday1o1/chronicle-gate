@@ -4,7 +4,7 @@ metadata:
   name: order-lifecycle-controlled
   description: Seeded stale aggregate overwrite workflow.
 spec:
-  databaseSchemaVersion: order-lifecycle-v2
+  databaseSchemaVersion: order-lifecycle-v3
   services:
     - name: order-workflow
       image: ghcr.io/example/state-workflow@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

@@ -1,6 +1,6 @@
 # Order lifecycle seeded qualifications
 
-This example qualifies inventory projection, precise external-effect crash, schema-default, aggregate-version, cross-stream, and event-time invariants against correct baselines and seeded candidates.
+This example qualifies inventory projection, precise external-effect crash, schema-default, aggregate-version, cross-stream, event-time, and transactional-outbox invariants against correct baselines and seeded candidates.
 
 ## What the run proves
 
@@ -78,7 +78,7 @@ Timestamp fields are normalized only at exact authored JSON Pointers, and every 
 The generated local image IDs are content-addressed but not registry-resolvable or cross-platform portable.
 They are accepted only with `--development-local-images`.
 The R5 executor controls handler release across two distinct logical topics and does not implement or claim within-partition reordering.
-Outbox crash scenarios remain extended V1 work in Milestone 7.
+The connected R7 topology is repository-trusted qualification code and is not a general service-discovery or arbitrary command-execution facility.
 
 ## R3, R5, and R6 controlled schedules
 
@@ -103,6 +103,26 @@ The on-time cancellation scenario is the nearby passing control.
 
 Every controlled regression bundle is replayed after its source baseline and candidate images are deleted.
 The report renderers retain the physical order and both time domains without treating attempt-prefixed topics as semantic equality inputs.
+
+## R7 transactional outbox crash
+
+`r7-outbox-crash-after-ack.yaml` creates an order through the real `POST /orders` endpoint.
+The order API writes the order and one full CloudEvent outbox row in the same PostgreSQL transaction through a role that cannot publish or modify relay evidence.
+The relay role can claim and complete outbox rows but cannot insert or alter orders.
+
+The connected topology publishes `OrderCreated`, emits payment and inventory requests, produces independent outcomes in payment-first order, advances the order to `ready`, projects fulfillment, and records one local synthetic effect.
+The harness proves every expected consumer assignment before it creates the order or publishes the qualification trigger.
+
+For the crash case, the relay writes its acknowledged topic, partition, offset, payload digest, logical event ID, emitted event ID, and attempt number before entering `after_outbox_publish`.
+The harness waits for the first connected business flow to reach full quiescence, verifies the trigger delivery, kills the relay, waits for its group to become empty, and restarts the same exact image with a fresh probe instance.
+The baseline republishes the stable logical ID at offsets `0` and `1`, and downstream idempotency retains one effect.
+The candidate preserves the ID on attempt one but uses a deterministic retry ID on attempt two, which creates two effect-ledger entries for the same business key.
+
+`r7-unrelated-orders-control.yaml` creates two independent orders without a crash.
+Both the baseline and R7 candidate publish each outbox row exactly once with its stable logical ID, reach two ready orders, and retain two effects.
+
+Every comparable R7 attempt requires all eight topic bounds, all seven consumer-group positions at their topic ends, zero unpublished outbox rows, an idle probe, no armed or blocked checkpoint, no pending effect, the declared terminal database counts, and unchanged schema fingerprints through the full stability window.
+The exact expected defect signature is checked in as [`expected/r7-signature.json`](expected/r7-signature.json).
 
 ## Stable reduction and replay
 

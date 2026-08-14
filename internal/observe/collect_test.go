@@ -58,6 +58,25 @@ func TestKafkaProjectionPreservesHeaderBytesAndChecksKey(t *testing.T) {
 	}
 }
 
+func TestKafkaPhysicalMetadataPreservesWireEvidence(t *testing.T) {
+	document := []byte(`{"type":"example","id":"e1","data":{"orderId":"1"}}`)
+	order, err := topLevelJSONKeyOrder(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(order, []string{"type", "id", "data"}) {
+		t.Fatalf("wire order was not preserved: %v", order)
+	}
+	fingerprints := traceContextFingerprints([]kgo.RecordHeader{
+		{Key: "business", Value: []byte("retained-semantically")},
+		{Key: "traceparent", Value: []byte("00-a-b-01")},
+		{Key: "traceparent", Value: []byte("00-c-d-01")},
+	})
+	if len(fingerprints) != 2 || fingerprints[0].WireIndex != 1 || fingerprints[1].WireIndex != 2 || fingerprints[0].SHA256 == fingerprints[1].SHA256 {
+		t.Fatalf("trace fingerprints lost identity or order: %#v", fingerprints)
+	}
+}
+
 func TestSQLOrderingRejectsMissingOrDescendingKeys(t *testing.T) {
 	if err := verifySQLOrdering([]map[string]any{{"id": "b"}, {"id": "a"}}, []string{"id"}); err == nil {
 		t.Fatal("descending rows were accepted")

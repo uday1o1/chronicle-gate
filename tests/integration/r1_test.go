@@ -357,8 +357,9 @@ func TestManualSynchronousCommitControl(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	baseline := filepath.Join(repository, "examples/order-lifecycle/targets/generated/r2-baseline.yaml")
+	candidate := filepath.Join(repository, "examples/order-lifecycle/targets/generated/r2-candidate.yaml")
 	report, stdout, stderr, exitCode := runCLIWithScenario(t, repository, filepath.Join(root, "artifacts"),
-		filepath.Join(repository, "examples/order-lifecycle/scenarios/manual-offset-commit-control.yaml"), baseline, baseline, true,
+		filepath.Join(repository, "examples/order-lifecycle/scenarios/manual-offset-commit-control.yaml"), baseline, candidate, true,
 	)
 	if exitCode != 0 || report.Classification != "PASS" {
 		t.Fatalf("manual commit exit=%d report=%#v\nstdout=%s\nstderr=%s", exitCode, report, stdout, stderr)

@@ -14,7 +14,7 @@
       "additionalProperties": false,
       "required": ["seed", "clock", "events", "steps", "quiescence", "observations", "invariants", "normalization", "limits"],
       "properties": {
-        "seed": {"type": "object"},
+        "seed": {"$ref": "#/$defs/seed"},
         "clock": {"type": "object", "additionalProperties": false, "properties": {"start": {"type": "string", "format": "date-time"}}},
         "events": {"type": "object", "additionalProperties": {"$ref": "#/$defs/cloudEvent"}},
         "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}},
@@ -31,7 +31,20 @@
   "$defs": {
     "control": {
       "type": "object", "additionalProperties": false, "required": ["mode", "expectLate"],
-      "properties": {"mode": {"enum": ["aggregate-version", "cross-stream", "event-time"]}, "expectLate": {"type": "boolean"}}
+      "properties": {"mode": {"enum": ["aggregate-version", "cross-stream", "event-time", "outbox-crash", "outbox-control"]}, "expectLate": {"type": "boolean"}}
+    },
+    "seed": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "orders": {"type": "array", "maxItems": 16, "items": {
+          "type": "object", "additionalProperties": false, "required": ["requestId", "orderId", "amount"],
+          "properties": {
+            "requestId": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+            "orderId": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+            "amount": {"type": "integer", "minimum": 1}
+          }
+        }}
+      }
     },
     "metadata": {
       "type": "object", "additionalProperties": false, "required": ["name"],

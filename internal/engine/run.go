@@ -104,6 +104,7 @@ type AttemptEvidence struct {
 	Group                   string                                   `json:"group"`
 	AuthoredImage           string                                   `json:"authoredImage"`
 	ExecutedImageID         string                                   `json:"executedImageId,omitempty"`
+	ServiceImages           []ServiceImageEvidence                   `json:"serviceImages,omitempty"`
 	Published               broker.RecordIdentity                    `json:"published"`
 	Publications            []broker.RecordIdentity                  `json:"publications"`
 	Deliveries              []database.Delivery                      `json:"deliveries"`
@@ -122,6 +123,11 @@ type AttemptEvidence struct {
 	CommittedWhileBlocked   *int64                                   `json:"committedWhileBlocked,omitempty"`
 	FinalCommitted          *int64                                   `json:"finalCommitted,omitempty"`
 	Effects                 *effects.Observation                     `json:"effects,omitempty"`
+	EffectProjection        []effects.SemanticEntry                  `json:"effectProjection,omitempty"`
+	Outbox                  []database.OutboxState                   `json:"outbox,omitempty"`
+	OutboxPublishes         []database.OutboxPublish                 `json:"outboxPublishes,omitempty"`
+	TopicBounds             map[string]broker.OffsetBounds           `json:"topicBounds,omitempty"`
+	GroupOffsets            map[string]int64                         `json:"groupOffsets,omitempty"`
 	Observations            []observe.Evidence                       `json:"observations,omitempty"`
 	Registry                []registry.Evidence                      `json:"registry,omitempty"`
 	Quiescence              *QuiescenceEvidence                      `json:"quiescence,omitempty"`
@@ -131,6 +137,12 @@ type AttemptEvidence struct {
 	InvariantRows           []map[string]any                         `json:"invariantRows"`
 	Signature               *FailureSignature                        `json:"signature,omitempty"`
 	Error                   string                                   `json:"error,omitempty"`
+}
+
+type ServiceImageEvidence struct {
+	Service         string `json:"service"`
+	AuthoredImage   string `json:"authoredImage"`
+	ExecutedImageID string `json:"executedImageId"`
 }
 
 type QuiescenceEvidence struct {
@@ -220,6 +232,10 @@ func (failure *infrastructureFailure) Unwrap() error {
 }
 
 func ValidateVerticalSlice(scenario spec.Scenario, target spec.Target) error {
+	if isOutboxScenario(scenario) {
+		_, err := buildOutboxPlan(scenario, target)
+		return err
+	}
 	if isControlledScenario(scenario) {
 		_, err := buildControlledPlan(scenario, target)
 		return err
@@ -346,14 +362,18 @@ func Run(ctx context.Context, config Config) (report Report) {
 		finalizeRun(config.Output, &report, journal, nil)
 		return report
 	}
-	controlled := isControlledScenario(config.Scenario)
-	precise := !controlled && isPreciseScenario(config.Scenario)
-	general := !controlled && isGeneralObserverScenario(config.Scenario)
+	outbox := isOutboxScenario(config.Scenario)
+	controlled := !outbox && isControlledScenario(config.Scenario)
+	precise := !outbox && !controlled && isPreciseScenario(config.Scenario)
+	general := !outbox && !controlled && isGeneralObserverScenario(config.Scenario)
 	var plan verticalPlan
+	var baselineOutboxPlan outboxPlan
 	var baselineControlledPlan controlledPlan
 	var baselinePrecisePlan precisePlan
 	var baselineGeneralPlan generalPlan
-	if controlled {
+	if outbox {
+		baselineOutboxPlan, err = buildOutboxPlan(config.Scenario, config.Baseline)
+	} else if controlled {
 		baselineControlledPlan, err = buildControlledPlan(config.Scenario, config.Baseline)
 	} else if precise {
 		baselinePrecisePlan, err = buildPrecisePlan(config.Scenario, config.Baseline)
@@ -418,7 +438,12 @@ func Run(ctx context.Context, config Config) (report Report) {
 	}
 	if err == nil {
 		var baseline AttemptEvidence
-		if controlled {
+		if outbox {
+			baseline, err = executeOutboxAttempt(runContext, outboxAttemptConfig{
+				RunID: report.RunID, Index: 0, Role: "baseline", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+				Plan: baselineOutboxPlan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
+			})
+		} else if controlled {
 			baseline, err = executeControlledAttempt(runContext, controlledAttemptConfig{
 				RunID: report.RunID, Index: 0, Role: "baseline", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
 				Plan: baselineControlledPlan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
@@ -442,7 +467,9 @@ func Run(ctx context.Context, config Config) (report Report) {
 		report.Baseline = &baseline
 		if err == nil && len(baseline.InvariantRows) != 0 {
 			invariantID := plan.invariant.ID
-			if controlled && len(baselineControlledPlan.invariants) != 0 {
+			if outbox && len(baselineOutboxPlan.invariants) != 0 {
+				invariantID = baselineOutboxPlan.invariants[0].ID
+			} else if controlled && len(baselineControlledPlan.invariants) != 0 {
 				invariantID = baselineControlledPlan.invariants[0].ID
 			} else if precise {
 				invariantID = baselinePrecisePlan.invariant.ID
@@ -465,11 +492,14 @@ func Run(ctx context.Context, config Config) (report Report) {
 	}
 	if err == nil {
 		var candidatePlan verticalPlan
+		var candidateOutboxPlan outboxPlan
 		var candidateControlledPlan controlledPlan
 		var candidatePrecisePlan precisePlan
 		var candidateGeneralPlan generalPlan
 		var planErr error
-		if controlled {
+		if outbox {
+			candidateOutboxPlan, planErr = buildOutboxPlan(config.Scenario, config.Candidate)
+		} else if controlled {
 			candidateControlledPlan, planErr = buildControlledPlan(config.Scenario, config.Candidate)
 		} else if precise {
 			candidatePrecisePlan, planErr = buildPrecisePlan(config.Scenario, config.Candidate)
@@ -485,7 +515,13 @@ func Run(ctx context.Context, config Config) (report Report) {
 			for index := 0; index < attempts && err == nil; index++ {
 				var attempt AttemptEvidence
 				var attemptErr error
-				if controlled {
+				if outbox {
+					attempt, attemptErr = executeOutboxAttempt(runContext, outboxAttemptConfig{
+						RunID: report.RunID, Index: index, Role: "candidate", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+						Plan: candidateOutboxPlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal,
+						SecretValues: secretValues, Baseline: report.Baseline,
+					})
+				} else if controlled {
 					attempt, attemptErr = executeControlledAttempt(runContext, controlledAttemptConfig{
 						RunID: report.RunID, Index: index, Role: "candidate", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
 						Plan: candidateControlledPlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal,
@@ -532,7 +568,7 @@ func Run(ctx context.Context, config Config) (report Report) {
 	if err != nil && report.Error == "" {
 		report.fail(classifyOperationalError(err), err)
 	}
-	if err == nil && report.Classification == "SEMANTIC_REGRESSION" && !config.NoMinimize && !controlled && !precise && !general {
+	if err == nil && report.Classification == "SEMANTIC_REGRESSION" && !config.NoMinimize && !outbox && !controlled && !precise && !general {
 		if transitionErr := transition(journal, &report, "MINIMIZING"); transitionErr != nil {
 			report.fail("INFRASTRUCTURE_ERROR", transitionErr)
 		} else {

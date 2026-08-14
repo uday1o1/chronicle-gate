@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/outbox-relay-trigger.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run"],
+  "properties": {
+    "run": {"type": "string", "minLength": 1}
+  }
+}

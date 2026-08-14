@@ -17,6 +17,7 @@ func main() {
 	flakyImage := flag.String("flaky-image", "", "content-addressed deterministic flaky Docker image ID")
 	r4BaselineImage := flag.String("r4-baseline-image", "", "content-addressed R4 baseline Docker image ID")
 	r4CandidateImage := flag.String("r4-candidate-image", "", "content-addressed R4 candidate Docker image ID")
+	r4MetadataImage := flag.String("r4-metadata-image", "", "content-addressed R4 transport-metadata control Docker image ID")
 	workflowBaselineImage := flag.String("workflow-baseline-image", "", "content-addressed baseline workflow Docker image ID")
 	workflowCandidateImage := flag.String("workflow-candidate-image", "", "content-addressed R2 workflow Docker image ID")
 	effectSinkImage := flag.String("effect-sink-image", "", "content-addressed effect sink Docker image ID")
@@ -24,14 +25,20 @@ func main() {
 	stateR3Image := flag.String("state-r3-image", "", "content-addressed R3 workflow Docker image ID")
 	stateR5Image := flag.String("state-r5-image", "", "content-addressed R5 workflow Docker image ID")
 	stateR6Image := flag.String("state-r6-image", "", "content-addressed R6 workflow Docker image ID")
+	orderAPIImage := flag.String("order-api-image", "", "content-addressed order API Docker image ID")
+	outboxRelayBaselineImage := flag.String("outbox-relay-baseline-image", "", "content-addressed baseline outbox relay Docker image ID")
+	outboxRelayCandidateImage := flag.String("outbox-relay-candidate-image", "", "content-addressed R7 outbox relay Docker image ID")
+	lifecycleWorkflowImage := flag.String("lifecycle-workflow-image", "", "content-addressed connected lifecycle workflow Docker image ID")
 	output := flag.String("out", "examples/order-lifecycle/targets/generated", "generated target directory")
 	flag.Parse()
 
 	for name, image := range map[string]string{
 		"baseline": *baselineImage, "candidate": *candidateImage, "flaky": *flakyImage,
-		"R4 baseline": *r4BaselineImage, "R4 candidate": *r4CandidateImage,
+		"R4 baseline": *r4BaselineImage, "R4 candidate": *r4CandidateImage, "R4 metadata": *r4MetadataImage,
 		"workflow baseline": *workflowBaselineImage, "workflow candidate": *workflowCandidateImage, "effect sink": *effectSinkImage,
 		"state baseline": *stateBaselineImage, "state R3": *stateR3Image, "state R5": *stateR5Image, "state R6": *stateR6Image,
+		"order API": *orderAPIImage, "outbox relay baseline": *outboxRelayBaselineImage,
+		"outbox relay candidate": *outboxRelayCandidateImage, "lifecycle workflow": *lifecycleWorkflowImage,
 	} {
 		if !imagelock.IsLocalImageID(image) {
 			fatalf("%s image %q is not an exact sha256 Docker image ID", name, image)
@@ -55,6 +62,9 @@ func main() {
 	if err := writeTarget(filepath.Join(*output, "r4-candidate.yaml"), *r4CandidateImage); err != nil {
 		fatalf("write R4 candidate target: %v", err)
 	}
+	if err := writeTarget(filepath.Join(*output, "r4-metadata-candidate.yaml"), *r4MetadataImage); err != nil {
+		fatalf("write R4 metadata target: %v", err)
+	}
 	if err := writePreciseTarget(filepath.Join(*output, "r2-baseline.yaml"), *workflowBaselineImage, *effectSinkImage); err != nil {
 		fatalf("write R2 baseline target: %v", err)
 	}
@@ -71,6 +81,41 @@ func main() {
 			fatalf("write controlled target %s: %v", name, err)
 		}
 	}
+	if err := writeOutboxTarget(filepath.Join(*output, "r7-baseline.yaml"), *orderAPIImage, *outboxRelayBaselineImage, *lifecycleWorkflowImage, *r4BaselineImage, *effectSinkImage); err != nil {
+		fatalf("write R7 baseline target: %v", err)
+	}
+	if err := writeOutboxTarget(filepath.Join(*output, "r7-candidate.yaml"), *orderAPIImage, *outboxRelayCandidateImage, *lifecycleWorkflowImage, *r4BaselineImage, *effectSinkImage); err != nil {
+		fatalf("write R7 candidate target: %v", err)
+	}
+}
+
+func writeOutboxTarget(path, orderAPIImage, relayImage, workflowImage, projectorImage, sinkImage string) error {
+	service := func(name, image string, cpus float64, memory int64, pids int, dependencies []string) spec.Service {
+		return spec.Service{
+			Name: name, Image: image, Command: []string{}, Args: []string{}, Environment: map[string]string{}, SecretEnvironment: map[string]string{},
+			Health: spec.Health{Type: "http", Path: "/healthz", Port: 8080, Timeout: duration("20s"), Interval: duration("250ms")},
+			Probe:  spec.ProbeDeclaration{Enabled: false}, Resources: spec.Resources{CPUs: cpus, MemoryBytes: memory, PIDs: pids}, Dependencies: dependencies,
+		}
+	}
+	orderAPI := service("order-api", orderAPIImage, 0.5, 128<<20, 64, []string{})
+	relay := service("outbox-relay", relayImage, 1, 256<<20, 128, []string{})
+	relay.Probe = spec.ProbeDeclaration{
+		Enabled: true, ProtocolVersion: "chronicle-probe/v1alpha1", CommitMode: "manual_sync", MaxControlledInFlight: 1,
+		Checkpoints: []string{"after_outbox_publish"}, LogicalClock: true,
+	}
+	workflow := service("order-workflow", workflowImage, 1, 256<<20, 128, []string{"effect-sink"})
+	projector := service("fulfillment-projector", projectorImage, 1, 256<<20, 128, []string{})
+	sink := service("effect-sink", sinkImage, 0.5, 128<<20, 64, []string{})
+	target := spec.Target{
+		APIVersion: spec.APIVersion, Kind: "Target",
+		Metadata: spec.Metadata{Name: "order-lifecycle-r7", Description: "Repository-trusted connected transactional outbox workflow."},
+		Spec:     spec.TargetSpec{DatabaseSchemaVersion: "order-lifecycle-v3", Services: []spec.Service{orderAPI, relay, workflow, projector, sink}},
+	}
+	document, err := yaml.Marshal(target)
+	if err != nil {
+		return fmt.Errorf("marshal outbox target: %w", err)
+	}
+	return os.WriteFile(path, document, 0o600)
 }
 
 func writeControlledTarget(path, image string) error {
@@ -79,7 +124,7 @@ func writeControlledTarget(path, image string) error {
 		Kind:       "Target",
 		Metadata:   spec.Metadata{Name: "order-lifecycle-controlled", Description: "Repository-trusted controlled order-state workflow."},
 		Spec: spec.TargetSpec{
-			DatabaseSchemaVersion: "order-lifecycle-v2",
+			DatabaseSchemaVersion: "order-lifecycle-v3",
 			Services: []spec.Service{{
 				Name: "order-workflow", Image: image, Command: []string{}, Args: []string{}, Environment: map[string]string{}, SecretEnvironment: map[string]string{},
 				Health: spec.Health{Type: "http", Path: "/healthz", Port: 8080, Timeout: duration("20s"), Interval: duration("250ms")},
@@ -105,7 +150,7 @@ func writePreciseTarget(path, workflowImage, effectSinkImage string) error {
 		Kind:       "Target",
 		Metadata:   spec.Metadata{Name: "order-lifecycle-r2", Description: "Repository-trusted local precise crash target."},
 		Spec: spec.TargetSpec{
-			DatabaseSchemaVersion: "order-lifecycle-v2",
+			DatabaseSchemaVersion: "order-lifecycle-v3",
 			Services: []spec.Service{
 				{
 					Name: "order-workflow", Image: workflowImage, Command: []string{}, Args: []string{}, Environment: map[string]string{}, SecretEnvironment: map[string]string{},
@@ -134,7 +179,7 @@ func writeTarget(path string, image string) error {
 		Kind:       "Target",
 		Metadata:   spec.Metadata{Name: "order-lifecycle", Description: "Repository-trusted local R1 projector image."},
 		Spec: spec.TargetSpec{
-			DatabaseSchemaVersion: "order-lifecycle-v2",
+			DatabaseSchemaVersion: "order-lifecycle-v3",
 			Services: []spec.Service{{
 				Name:              "fulfillment-projector",
 				Image:             image,

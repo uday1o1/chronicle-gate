@@ -1,13 +1,13 @@
 apiVersion: chronicle.dev/v1alpha1
 kind: Target
 metadata:
-  name: order-lifecycle
-  description: Correct reference projector.
+  name: order-lifecycle-r4
+  description: Semantically equivalent projector with different transport metadata and JSON wire order.
 spec:
   databaseSchemaVersion: order-lifecycle-v3
   services:
     - name: fulfillment-projector
-      image: ghcr.io/example/fulfillment-projector@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      image: ghcr.io/example/fulfillment-projector@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
       command: []
       args: []
       environment: {}
@@ -16,7 +16,7 @@ spec:
         type: http
         path: /healthz
         port: 8080
-        timeout: 5s
+        timeout: 20s
         interval: 250ms
       probe:
         enabled: false

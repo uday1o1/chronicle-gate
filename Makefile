@@ -8,6 +8,7 @@ REFERENCE_CANDIDATE_IMAGE := chronicle-gate/fulfillment-projector:candidate-r1-m
 REFERENCE_FLAKY_IMAGE := chronicle-gate/fulfillment-projector:flaky-r1-m3
 REFERENCE_R4_BASELINE_IMAGE := chronicle-gate/fulfillment-projector:baseline-r4-m5
 REFERENCE_R4_CANDIDATE_IMAGE := chronicle-gate/fulfillment-projector:candidate-r4-m5
+REFERENCE_R4_METADATA_IMAGE := chronicle-gate/fulfillment-projector:candidate-r4-metadata-m7
 REFERENCE_WORKFLOW_BASELINE_IMAGE := chronicle-gate/order-workflow:baseline-m4
 REFERENCE_WORKFLOW_CANDIDATE_IMAGE := chronicle-gate/order-workflow:candidate-r2-m4
 REFERENCE_EFFECT_SINK_IMAGE := chronicle-gate/effect-sink:baseline-m4
@@ -15,6 +16,10 @@ REFERENCE_STATE_BASELINE_IMAGE := chronicle-gate/state-workflow:baseline-m6
 REFERENCE_STATE_R3_IMAGE := chronicle-gate/state-workflow:candidate-r3-m6
 REFERENCE_STATE_R5_IMAGE := chronicle-gate/state-workflow:candidate-r5-m6
 REFERENCE_STATE_R6_IMAGE := chronicle-gate/state-workflow:candidate-r6-m6
+REFERENCE_ORDER_API_IMAGE := chronicle-gate/order-api:baseline-m7
+REFERENCE_OUTBOX_RELAY_BASELINE_IMAGE := chronicle-gate/outbox-relay:baseline-m7
+REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE := chronicle-gate/outbox-relay:candidate-r7-m7
+REFERENCE_LIFECYCLE_WORKFLOW_IMAGE := chronicle-gate/lifecycle-workflow:baseline-m7
 GO_CACHE_MOUNTS := -v chronicle-gate-go-mod-cache:/go/pkg/mod -v chronicle-gate-go-build-cache:/root/.cache/go-build
 
 HOST_GOOS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -75,6 +80,7 @@ reference-images:
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=flaky-r1 --label dev.chronicle.reference=flaky-r1 -t $(REFERENCE_FLAKY_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=baseline-r4 --label dev.chronicle.reference=baseline-r4 -t $(REFERENCE_R4_BASELINE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r4 --label dev.chronicle.reference=candidate-r4 -t $(REFERENCE_R4_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
+	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r4-metadata --label dev.chronicle.reference=candidate-r4-metadata -t $(REFERENCE_R4_METADATA_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=baseline --label dev.chronicle.reference=workflow-baseline -t $(REFERENCE_WORKFLOW_BASELINE_IMAGE) -f examples/order-lifecycle/services/order-workflow/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r2 --label dev.chronicle.reference=workflow-candidate-r2 -t $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/order-workflow/Dockerfile .
 	docker build --pull=false --label dev.chronicle.reference=effect-sink -t $(REFERENCE_EFFECT_SINK_IMAGE) -f examples/order-lifecycle/services/effect-sink/Dockerfile .
@@ -82,7 +88,11 @@ reference-images:
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r3 --label dev.chronicle.reference=state-candidate-r3 -t $(REFERENCE_STATE_R3_IMAGE) -f examples/order-lifecycle/services/state-workflow/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r5 --label dev.chronicle.reference=state-candidate-r5 -t $(REFERENCE_STATE_R5_IMAGE) -f examples/order-lifecycle/services/state-workflow/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r6 --label dev.chronicle.reference=state-candidate-r6 -t $(REFERENCE_STATE_R6_IMAGE) -f examples/order-lifecycle/services/state-workflow/Dockerfile .
-	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))" --flaky-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_FLAKY_IMAGE))" --r4-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_BASELINE_IMAGE))" --r4-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_CANDIDATE_IMAGE))" --workflow-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_BASELINE_IMAGE))" --workflow-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE))" --effect-sink-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_EFFECT_SINK_IMAGE))" --state-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_BASELINE_IMAGE))" --state-r3-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R3_IMAGE))" --state-r5-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R5_IMAGE))" --state-r6-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R6_IMAGE))"
+	docker build --pull=false --label dev.chronicle.reference=order-api -t $(REFERENCE_ORDER_API_IMAGE) -f examples/order-lifecycle/services/order-api/Dockerfile .
+	docker build --pull=false --build-arg RELAY_VARIANT=baseline --label dev.chronicle.reference=outbox-relay-baseline -t $(REFERENCE_OUTBOX_RELAY_BASELINE_IMAGE) -f examples/order-lifecycle/services/outbox-relay/Dockerfile .
+	docker build --pull=false --build-arg RELAY_VARIANT=candidate-r7 --label dev.chronicle.reference=outbox-relay-candidate-r7 -t $(REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/outbox-relay/Dockerfile .
+	docker build --pull=false --label dev.chronicle.reference=lifecycle-workflow -t $(REFERENCE_LIFECYCLE_WORKFLOW_IMAGE) -f examples/order-lifecycle/services/lifecycle-workflow/Dockerfile .
+	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))" --flaky-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_FLAKY_IMAGE))" --r4-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_BASELINE_IMAGE))" --r4-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_CANDIDATE_IMAGE))" --r4-metadata-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_METADATA_IMAGE))" --workflow-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_BASELINE_IMAGE))" --workflow-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE))" --effect-sink-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_EFFECT_SINK_IMAGE))" --state-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_BASELINE_IMAGE))" --state-r3-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R3_IMAGE))" --state-r5-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R5_IMAGE))" --state-r6-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R6_IMAGE))" --order-api-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_ORDER_API_IMAGE))" --outbox-relay-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_OUTBOX_RELAY_BASELINE_IMAGE))" --outbox-relay-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE))" --lifecycle-workflow-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_LIFECYCLE_WORKFLOW_IMAGE))"
 
 test-integration: reference-images build
 	@mkdir -p dist run

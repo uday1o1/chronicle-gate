@@ -1,0 +1,66 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: single-delivery-idempotency-control
+  description: A single inventory delivery produces one reservation in both the guarded and defective targets.
+spec:
+  seed: {}
+  clock:
+    start: "2026-08-13T00:00:00Z"
+  events:
+    inventory-requested:
+      specversion: "1.0"
+      id: inventory-requested-control-1
+      source: /orders/order-control-1
+      type: dev.chronicle.inventory.requested
+      subject: order-control-1
+      time: "2026-08-13T00:00:01Z"
+      datacontenttype: application/json
+      aggregateid: order-control-1
+      aggregateversion: 1
+      dataschema: schemas/inventory-requested.schema.json
+      data:
+        orderId: order-control-1
+        sku: sku-control-1
+        quantity: 1
+  steps:
+    - id: publish-inventory
+      publish:
+        event: inventory-requested
+        topic: inventory
+        partition: 0
+        key: order-control-1
+    - id: observe-reservation
+      dependsOn: [publish-inventory]
+      timeout: 15s
+      observe:
+        observation: inventory-reservations
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 2s
+    conditions:
+      - id: projector-lag
+        type: groupLagZero
+        group: fulfillment-projector
+  observations:
+    - id: inventory-reservations
+      sql:
+        queryFile: queries/inventory-reservations.sql
+        orderBy: [order_id, sku]
+        mode: ordered
+  invariants:
+    - id: no-duplicate-reservations
+      queryFile: queries/duplicate-reservations.sql
+      classification: SEMANTIC_REGRESSION
+  normalization:
+    - id: remove-observed-at
+      observation: inventory-reservations
+      type: remove
+      pointer: /rows/0/observed_at
+  limits:
+    maxSteps: 100
+    maxEvents: 100
+    maxRunDuration: 5m
+    confirmationAttempts: 2
+    minimizationTrials: 100
+    minimizationDuration: 10m

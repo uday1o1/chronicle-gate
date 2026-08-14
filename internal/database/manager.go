@@ -23,6 +23,8 @@ const (
 	ownerRole        = "chronicle_owner"
 	serviceRole      = "chronicle_service"
 	observerRole     = "chronicle_observer"
+	orderAPIRole     = "chronicle_order_api"
+	outboxRelayRole  = "chronicle_outbox_relay"
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
@@ -35,6 +37,8 @@ type Manager struct {
 	adminPassword    string
 	servicePassword  string
 	observerPassword string
+	orderAPIPassword string
+	outboxPassword   string
 	templateHash     string
 }
 
@@ -43,6 +47,33 @@ type Attempt struct {
 	Name        string `json:"name"`
 	ServiceDSN  string `json:"-"`
 	ObserverDSN string `json:"-"`
+	OrderAPIDSN string `json:"-"`
+	OutboxDSN   string `json:"-"`
+}
+
+// OutboxPublish is durable evidence of one acknowledged relay publication.
+type OutboxPublish struct {
+	Sequence       int64  `json:"sequence"`
+	OutboxID       int64  `json:"outboxId"`
+	LogicalEventID string `json:"logicalEventId"`
+	EmittedEventID string `json:"emittedEventId"`
+	Attempt        int    `json:"attempt"`
+	Topic          string `json:"topic"`
+	Partition      int32  `json:"partition"`
+	Offset         int64  `json:"offset"`
+	ValueSHA256    string `json:"valueSha256"`
+	AckObservedAt  string `json:"ackObservedAt"`
+}
+
+// OutboxState is the semantic and relay state of one transactional row.
+type OutboxState struct {
+	ID              int64  `json:"id"`
+	EventID         string `json:"eventId"`
+	AggregateID     string `json:"aggregateId"`
+	BusinessKey     string `json:"businessKey"`
+	Amount          int64  `json:"amount"`
+	PublishAttempts int    `json:"publishAttempts"`
+	Published       bool   `json:"published"`
 }
 
 // Delivery identifies one processed physical Kafka record.
@@ -81,6 +112,14 @@ func NewManager(adminDSN, internalEndpoint, adminUser, adminPassword string) (*M
 	if err != nil {
 		return nil, err
 	}
+	orderAPIPassword, err := randomSecret()
+	if err != nil {
+		return nil, err
+	}
+	outboxPassword, err := randomSecret()
+	if err != nil {
+		return nil, err
+	}
 	return &Manager{
 		adminDSN:         adminDSN,
 		internalEndpoint: internalEndpoint,
@@ -88,6 +127,8 @@ func NewManager(adminDSN, internalEndpoint, adminUser, adminPassword string) (*M
 		adminPassword:    adminPassword,
 		servicePassword:  servicePassword,
 		observerPassword: observerPassword,
+		orderAPIPassword: orderAPIPassword,
+		outboxPassword:   outboxPassword,
 	}, nil
 }
 
@@ -102,6 +143,8 @@ func (manager *Manager) Bootstrap(ctx context.Context) error {
 		"CREATE ROLE " + ownerRole + " NOLOGIN",
 		"CREATE ROLE " + serviceRole + " LOGIN PASSWORD " + quoteLiteral(manager.servicePassword),
 		"CREATE ROLE " + observerRole + " LOGIN PASSWORD " + quoteLiteral(manager.observerPassword),
+		"CREATE ROLE " + orderAPIRole + " LOGIN PASSWORD " + quoteLiteral(manager.orderAPIPassword),
+		"CREATE ROLE " + outboxRelayRole + " LOGIN PASSWORD " + quoteLiteral(manager.outboxPassword),
 		"ALTER ROLE " + observerRole + " SET default_transaction_read_only = on",
 		"ALTER ROLE " + observerRole + " SET statement_timeout = '5s'",
 		"REVOKE CREATE ON SCHEMA public FROM PUBLIC",
@@ -178,10 +221,45 @@ business_key text NOT NULL,
 idempotency_key text NOT NULL UNIQUE,
 recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
 )`,
+		`CREATE TABLE orders (
+order_id text PRIMARY KEY,
+request_id text NOT NULL UNIQUE,
+amount bigint NOT NULL CHECK (amount > 0),
+status text NOT NULL,
+created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+)`,
+		`CREATE TABLE payments (
+id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+event_id text NOT NULL UNIQUE,
+order_id text NOT NULL,
+amount bigint NOT NULL CHECK (amount > 0),
+status text NOT NULL,
+recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
+)`,
 		`CREATE TABLE outbox (
 id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-event_id text NOT NULL,
+event_id text NOT NULL UNIQUE,
+aggregate_id text NOT NULL,
+business_key text NOT NULL,
+amount bigint NOT NULL CHECK (amount > 0),
+event jsonb NOT NULL,
+publish_attempts integer NOT NULL DEFAULT 0 CHECK (publish_attempts >= 0),
 published_at timestamptz
+)`,
+		`CREATE TABLE outbox_publish_evidence (
+publish_sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+outbox_id bigint NOT NULL REFERENCES outbox(id),
+logical_event_id text NOT NULL,
+emitted_event_id text NOT NULL,
+publish_attempt integer NOT NULL CHECK (publish_attempt > 0),
+topic text NOT NULL,
+partition_id integer NOT NULL,
+record_offset bigint NOT NULL,
+value_sha256 text NOT NULL CHECK (length(value_sha256) = 64),
+ack_observed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+UNIQUE (outbox_id, publish_attempt),
+UNIQUE (topic, partition_id, record_offset)
 )`,
 		`CREATE TABLE fulfillment_projection (
 order_id text PRIMARY KEY,
@@ -220,14 +298,21 @@ UNIQUE (source_topic, source_partition, source_offset)
 )`,
 		"RESET ROLE",
 		"REVOKE ALL ON SCHEMA public FROM PUBLIC",
-		"GRANT CONNECT ON DATABASE " + templateDatabase + " TO " + serviceRole + ", " + observerRole,
-		"GRANT USAGE ON SCHEMA public TO " + serviceRole + ", " + observerRole,
+		"GRANT CONNECT ON DATABASE " + templateDatabase + " TO " + serviceRole + ", " + observerRole + ", " + orderAPIRole + ", " + outboxRelayRole,
+		"GRANT USAGE ON SCHEMA public TO " + serviceRole + ", " + observerRole + ", " + orderAPIRole + ", " + outboxRelayRole,
 		"GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO " + serviceRole,
+		"GRANT UPDATE (status, updated_at) ON orders TO " + serviceRole,
 		"GRANT UPDATE (commit_confirmed) ON delivery_ledger TO " + serviceRole,
 		"GRANT UPDATE (event_id, fulfillment_mode, status, updated_at) ON fulfillment_projection TO " + serviceRole,
 		"GRANT UPDATE (aggregate_version, status, payment_received, inventory_received, watermark, last_event_time, updated_at) ON order_state TO " + serviceRole,
 		"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO " + serviceRole,
 		"GRANT SELECT ON ALL TABLES IN SCHEMA public TO " + observerRole,
+		"GRANT SELECT, INSERT ON orders, outbox TO " + orderAPIRole,
+		"GRANT USAGE, SELECT ON SEQUENCE outbox_id_seq TO " + orderAPIRole,
+		"GRANT SELECT ON outbox TO " + outboxRelayRole,
+		"GRANT UPDATE (publish_attempts, published_at) ON outbox TO " + outboxRelayRole,
+		"GRANT INSERT ON outbox_publish_evidence TO " + outboxRelayRole,
+		"GRANT USAGE, SELECT ON SEQUENCE outbox_publish_evidence_publish_sequence_seq TO " + outboxRelayRole,
 	}
 	for _, statement := range statements {
 		if _, err := connection.Exec(ctx, statement); err != nil {
@@ -252,13 +337,15 @@ func (manager *Manager) Clone(ctx context.Context, name string) (Attempt, error)
 	if _, err := admin.Exec(ctx, "CREATE DATABASE "+name+" WITH TEMPLATE "+templateDatabase+" OWNER "+ownerRole); err != nil {
 		return Attempt{}, fmt.Errorf("clone attempt database %q: %w", name, err)
 	}
-	if _, err := admin.Exec(ctx, "GRANT CONNECT ON DATABASE "+name+" TO "+serviceRole+", "+observerRole); err != nil {
+	if _, err := admin.Exec(ctx, "GRANT CONNECT ON DATABASE "+name+" TO "+serviceRole+", "+observerRole+", "+orderAPIRole+", "+outboxRelayRole); err != nil {
 		return Attempt{}, fmt.Errorf("grant attempt database access: %w", err)
 	}
 	return Attempt{
 		Name:        name,
 		ServiceDSN:  manager.internalDSN(serviceRole, manager.servicePassword, name),
 		ObserverDSN: manager.hostDSN(observerRole, manager.observerPassword, name),
+		OrderAPIDSN: manager.internalDSN(orderAPIRole, manager.orderAPIPassword, name),
+		OutboxDSN:   manager.internalDSN(outboxRelayRole, manager.outboxPassword, name),
 	}, nil
 }
 
@@ -331,6 +418,36 @@ func (manager *Manager) FingerprintAttempt(ctx context.Context, attempt Attempt)
 	}
 	defer func() { _ = connection.Close(context.Background()) }()
 	return Fingerprint(ctx, connection)
+}
+
+// AssertWorkloadRoles proves the order API and relay credentials cannot mutate
+// tables outside their declared responsibilities.
+func (manager *Manager) AssertWorkloadRoles(ctx context.Context, attempt Attempt) error {
+	tests := []struct {
+		name      string
+		dsn       string
+		statement string
+	}{
+		{name: "order API unrelated update", dsn: manager.hostDSN(orderAPIRole, manager.orderAPIPassword, attempt.Name), statement: "UPDATE order_state SET status = 'forbidden'"},
+		{name: "order API publish evidence", dsn: manager.hostDSN(orderAPIRole, manager.orderAPIPassword, attempt.Name), statement: "INSERT INTO outbox_publish_evidence (outbox_id, logical_event_id, emitted_event_id, publish_attempt, topic, partition_id, record_offset, value_sha256) VALUES (1, 'x', 'x', 1, 'x', 0, 0, repeat('0', 64))"},
+		{name: "relay order insert", dsn: manager.hostDSN(outboxRelayRole, manager.outboxPassword, attempt.Name), statement: "INSERT INTO orders (order_id, request_id, amount, status) VALUES ('forbidden', 'forbidden', 1, 'forbidden')"},
+		{name: "relay unrelated update", dsn: manager.hostDSN(outboxRelayRole, manager.outboxPassword, attempt.Name), statement: "UPDATE fulfillment_projection SET status = 'forbidden'"},
+	}
+	for _, test := range tests {
+		connection, err := pgx.Connect(ctx, test.dsn)
+		if err != nil {
+			return fmt.Errorf("connect for %s role check: %w", test.name, err)
+		}
+		_, executeErr := connection.Exec(ctx, test.statement)
+		closeErr := connection.Close(ctx)
+		if executeErr == nil {
+			return fmt.Errorf("%s unexpectedly succeeded", test.name)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close %s role check: %w", test.name, closeErr)
+		}
+	}
+	return nil
 }
 
 func (manager *Manager) TemplateFingerprint() string {
@@ -464,6 +581,73 @@ func CountUnpublishedOutbox(ctx context.Context, dsn string) (int64, error) {
 		return 0, fmt.Errorf("count unpublished outbox rows: %w", err)
 	}
 	return count, nil
+}
+
+// OutboxStates returns transactional outbox rows in insertion order.
+func OutboxStates(ctx context.Context, dsn string) ([]OutboxState, error) {
+	connection, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("connect outbox observer: %w", err)
+	}
+	defer func() { _ = connection.Close(context.Background()) }()
+	rows, err := connection.Query(ctx, `
+SELECT id, event_id, aggregate_id, business_key, amount, publish_attempts,
+       published_at IS NOT NULL
+FROM outbox
+ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("query outbox states: %w", err)
+	}
+	defer rows.Close()
+	states := []OutboxState{}
+	for rows.Next() {
+		var state OutboxState
+		if err := rows.Scan(&state.ID, &state.EventID, &state.AggregateID, &state.BusinessKey, &state.Amount, &state.PublishAttempts, &state.Published); err != nil {
+			return nil, fmt.Errorf("scan outbox state: %w", err)
+		}
+		states = append(states, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate outbox states: %w", err)
+	}
+	return states, nil
+}
+
+// OutboxPublishes returns acknowledged relay publications in durable order.
+func OutboxPublishes(ctx context.Context, dsn string) ([]OutboxPublish, error) {
+	connection, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("connect outbox publish observer: %w", err)
+	}
+	defer func() { _ = connection.Close(context.Background()) }()
+	rows, err := connection.Query(ctx, `
+SELECT publish_sequence, outbox_id, logical_event_id, emitted_event_id,
+       publish_attempt, topic, partition_id, record_offset, value_sha256,
+       ack_observed_at
+FROM outbox_publish_evidence
+ORDER BY publish_sequence`)
+	if err != nil {
+		return nil, fmt.Errorf("query outbox publish evidence: %w", err)
+	}
+	defer rows.Close()
+	publishes := []OutboxPublish{}
+	for rows.Next() {
+		var publish OutboxPublish
+		var observed time.Time
+		if err := rows.Scan(
+			&publish.Sequence, &publish.OutboxID, &publish.LogicalEventID, &publish.EmittedEventID,
+			&publish.Attempt, &publish.Topic, &publish.Partition, &publish.Offset,
+			&publish.ValueSHA256, &observed,
+		); err != nil {
+			return nil, fmt.Errorf("scan outbox publish evidence: %w", err)
+		}
+		publish.AckObservedAt = observed.UTC().Format(time.RFC3339Nano)
+		publishes = append(publishes, publish)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate outbox publish evidence: %w", err)
+	}
+	return publishes, nil
 }
 
 // AggregateTransitions returns canonical controlled-event evidence in commit order.

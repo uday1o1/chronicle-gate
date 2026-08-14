@@ -8,7 +8,7 @@ type Scenario struct {
 }
 
 type ScenarioSpec struct {
-	Seed          map[string]any        `json:"seed" yaml:"seed"`
+	Seed          SeedSpec              `json:"seed" yaml:"seed"`
 	Clock         ClockSpec             `json:"clock" yaml:"clock"`
 	Events        map[string]CloudEvent `json:"events" yaml:"events"`
 	Steps         []Step                `json:"steps" yaml:"steps"`
@@ -19,6 +19,19 @@ type ScenarioSpec struct {
 	Limits        Limits                `json:"limits" yaml:"limits"`
 	Comparison    Comparison            `json:"comparison,omitempty" yaml:"comparison,omitempty"`
 	Control       *ControlledExecution  `json:"control,omitempty" yaml:"control,omitempty"`
+}
+
+// SeedSpec declares bounded domain fixtures created through trusted workload
+// entry points before the authored execution DAG begins.
+type SeedSpec struct {
+	Orders []OrderSeed `json:"orders,omitempty" yaml:"orders,omitempty"`
+}
+
+// OrderSeed is one request sent through the reference order API.
+type OrderSeed struct {
+	RequestID string `json:"requestId" yaml:"requestId"`
+	OrderID   string `json:"orderId" yaml:"orderId"`
+	Amount    int64  `json:"amount" yaml:"amount"`
 }
 
 // ControlledExecution declares the broker-real schedule whose evidence must be

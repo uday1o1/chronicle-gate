@@ -32,6 +32,26 @@ type Observation struct {
 	SHA256  string  `json:"sha256"`
 }
 
+// SemanticEntry is the workload-owned effect projection used for comparison.
+// Physical broker identity remains in Observation as integrity evidence.
+type SemanticEntry struct {
+	Kind           string `json:"kind"`
+	BusinessKey    string `json:"businessKey"`
+	Amount         int64  `json:"amount"`
+	IdempotencyKey string `json:"idempotencyKey"`
+}
+
+// Project returns the exact semantic effect fields defined by the workload.
+func Project(observation Observation) []SemanticEntry {
+	projected := make([]SemanticEntry, len(observation.Entries))
+	for index, entry := range observation.Entries {
+		projected[index] = SemanticEntry{
+			Kind: entry.Kind, BusinessKey: entry.BusinessKey, Amount: entry.Amount, IdempotencyKey: entry.IdempotencyKey,
+		}
+	}
+	return projected
+}
+
 type Client struct {
 	url   string
 	token string

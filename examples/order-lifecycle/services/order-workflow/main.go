@@ -199,9 +199,22 @@ func (workflow *workflow) process(ctx context.Context, record *kgo.Record) error
 	if err := checkpoint("after_state_load"); err != nil {
 		return err
 	}
+	var priorPhysicalDeliveries int
+	if err := workflow.database.QueryRow(ctx, `
+SELECT count(*) FROM delivery_ledger
+WHERE topic = $1 AND partition_id = $2 AND record_offset = $3`, record.Topic, record.Partition, record.Offset).Scan(&priorPhysicalDeliveries); err != nil {
+		return fmt.Errorf("count exact prior physical deliveries: %w", err)
+	}
+	var deliveryID int64
+	if err := workflow.database.QueryRow(ctx, `
+INSERT INTO delivery_ledger (event_id, topic, partition_id, record_offset, record_key)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id`, event.ID, record.Topic, record.Partition, record.Offset, string(record.Key)).Scan(&deliveryID); err != nil {
+		return fmt.Errorf("persist delivery attempt evidence: %w", err)
+	}
 	if !processed {
 		idempotencyKey := event.ID
-		if variant == "candidate-r2" {
+		if variant == "candidate-r2" && priorPhysicalDeliveries > 0 {
 			suffix := make([]byte, 8)
 			if _, err := rand.Read(suffix); err != nil {
 				return fmt.Errorf("create candidate idempotency key: %w", err)
@@ -218,15 +231,11 @@ func (workflow *workflow) process(ctx context.Context, record *kgo.Record) error
 	if err := checkpoint("after_external_effect"); err != nil {
 		return err
 	}
-	var deliveryID int64
 	if err := pgx.BeginFunc(ctx, workflow.database, func(transaction pgx.Tx) error {
 		if _, err := transaction.Exec(ctx, "INSERT INTO processed_events (event_id, aggregate_id) VALUES ($1, $2) ON CONFLICT (event_id) DO NOTHING", event.ID, event.AggregateID); err != nil {
 			return fmt.Errorf("persist processed event: %w", err)
 		}
-		return transaction.QueryRow(ctx, `
-INSERT INTO delivery_ledger (event_id, topic, partition_id, record_offset, record_key)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id`, event.ID, record.Topic, record.Partition, record.Offset, string(record.Key)).Scan(&deliveryID)
+		return nil
 	}); err != nil {
 		return fmt.Errorf("commit workflow state: %w", err)
 	}

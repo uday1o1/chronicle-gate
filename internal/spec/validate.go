@@ -19,6 +19,7 @@ import (
 var checkpointNames = map[string]struct{}{
 	"before_handler": {}, "after_state_load": {}, "after_external_effect": {},
 	"after_db_commit": {}, "before_offset_commit": {}, "after_offset_commit": {},
+	"after_outbox_publish": {},
 }
 
 var reservedEnvironment = map[string]struct{}{
@@ -26,7 +27,8 @@ var reservedEnvironment = map[string]struct{}{
 	"CHRONICLE_RUN_ID": {}, "CHRONICLE_ATTEMPT_ID": {}, "CHRONICLE_LOGICAL_CLOCK_SEED": {},
 	"CHRONICLE_LOGICAL_CLOCK_CURRENT": {}, "CHRONICLE_DATABASE_DSN_FILE": {}, "CHRONICLE_PROBE_TOKEN_FILE": {},
 	"CHRONICLE_EFFECT_SINK_URL": {}, "CHRONICLE_CONTROLLED_STEP_ID": {},
-	"CHRONICLE_CONTROLLED_CONFIG_FILE": {},
+	"CHRONICLE_CONTROLLED_CONFIG_FILE":    {},
+	"CHRONICLE_QUALIFICATION_RELAY_LATCH": {}, "CHRONICLE_OUTCOME_ORDER": {},
 	"CHRONICLE_SINK_WRITER_TOKEN_FILE": {}, "CHRONICLE_SINK_OBSERVER_TOKEN_FILE": {},
 }
 
@@ -188,6 +190,22 @@ func ValidateScenarioAndTargetWithOptions(scenario Scenario, target Target, root
 	}
 	if scenario.Kind != "Scenario" {
 		validator.add("/kind", "kind", "kind must be Scenario")
+	}
+	requestIDs := map[string]struct{}{}
+	orderIDs := map[string]struct{}{}
+	for index, order := range scenario.Spec.Seed.Orders {
+		pointer := fmt.Sprintf("/spec/seed/orders/%d", index)
+		if order.RequestID == "" || order.OrderID == "" || order.Amount <= 0 {
+			validator.add(pointer, "order_seed", "seeded orders require requestId, orderId, and a positive amount")
+		}
+		if _, exists := requestIDs[order.RequestID]; exists {
+			validator.add(pointer+"/requestId", "order_seed", "seeded request IDs must be unique")
+		}
+		if _, exists := orderIDs[order.OrderID]; exists {
+			validator.add(pointer+"/orderId", "order_seed", "seeded order IDs must be unique")
+		}
+		requestIDs[order.RequestID] = struct{}{}
+		orderIDs[order.OrderID] = struct{}{}
 	}
 
 	services := make(map[string]Service, len(target.Spec.Services))

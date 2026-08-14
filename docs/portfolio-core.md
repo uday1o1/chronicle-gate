@@ -48,6 +48,6 @@ Reproduction bundles are deliberately nonportable when development-local image I
 ## Claim boundary
 
 The evidence supports deterministic local qualification of the implemented R1 and R2 reference defects under the locked environment and documented resource assumptions.
-Milestone 5 now completes the V1 observer and schema-default model beyond this checkpoint.
+Milestones 5 through 7 now complete the V1 observer model, controlled schedule corpus, and connected transactional-outbox corpus beyond this checkpoint.
 This checkpoint document still makes only the narrower M4 claim measured above.
-The remaining cross-stream, outbox, complete corpus, performance, release, and hostile third-party image isolation work is governed by Milestones 6 through 10.
+The remaining robustness, security, performance, and release work is governed by Milestones 8 through 10.

@@ -1,0 +1,64 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Target
+metadata:
+  name: order-lifecycle-r7
+  description: Connected transactional outbox workflow.
+spec:
+  databaseSchemaVersion: order-lifecycle-v3
+  services:
+    - name: order-api
+      image: ghcr.io/example/order-api@sha256:1111111111111111111111111111111111111111111111111111111111111111
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health: {type: http, path: /healthz, port: 8080, timeout: 20s, interval: 250ms}
+      probe: {enabled: false}
+      resources: {cpus: 0.5, memoryBytes: 134217728, pids: 64}
+      dependencies: []
+    - name: outbox-relay
+      image: ghcr.io/example/outbox-relay@sha256:6666666666666666666666666666666666666666666666666666666666666666
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health: {type: http, path: /healthz, port: 8080, timeout: 20s, interval: 250ms}
+      probe:
+        enabled: true
+        protocolVersion: chronicle-probe/v1alpha1
+        commitMode: manual_sync
+        maxControlledInFlight: 1
+        checkpoints: [after_outbox_publish]
+        logicalClock: true
+      resources: {cpus: 1, memoryBytes: 268435456, pids: 128}
+      dependencies: []
+    - name: order-workflow
+      image: ghcr.io/example/lifecycle-workflow@sha256:3333333333333333333333333333333333333333333333333333333333333333
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health: {type: http, path: /healthz, port: 8080, timeout: 20s, interval: 250ms}
+      probe: {enabled: false}
+      resources: {cpus: 1, memoryBytes: 268435456, pids: 128}
+      dependencies: [effect-sink]
+    - name: fulfillment-projector
+      image: ghcr.io/example/fulfillment-projector@sha256:4444444444444444444444444444444444444444444444444444444444444444
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health: {type: http, path: /healthz, port: 8080, timeout: 20s, interval: 250ms}
+      probe: {enabled: false}
+      resources: {cpus: 1, memoryBytes: 268435456, pids: 128}
+      dependencies: []
+    - name: effect-sink
+      image: ghcr.io/example/effect-sink@sha256:5555555555555555555555555555555555555555555555555555555555555555
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health: {type: http, path: /healthz, port: 8080, timeout: 20s, interval: 250ms}
+      probe: {enabled: false}
+      resources: {cpus: 0.5, memoryBytes: 134217728, pids: 64}
+      dependencies: []

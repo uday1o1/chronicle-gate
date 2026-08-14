@@ -1,0 +1,143 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: outbox-crash-after-broker-ack
+  description: A relay crash after a broker acknowledgement must not duplicate a connected business effect.
+spec:
+  seed:
+    orders:
+      - requestId: request-r7-1
+        orderId: order-r7-1
+        amount: 1250
+  clock:
+    start: "2026-08-13T00:00:00Z"
+  events:
+    relay-trigger:
+      specversion: "1.0"
+      id: relay-trigger-r7-1
+      source: /chronicle/qualification
+      type: dev.chronicle.outbox.relay.requested
+      subject: relay-r7-1
+      time: "2026-08-13T00:00:01Z"
+      datacontenttype: application/json
+      aggregateid: relay-r7-1
+      aggregateversion: 1
+      dataschema: schemas/outbox-relay-trigger.schema.json
+      data:
+        run: r7-crash
+  steps:
+    - id: arm-after-publish
+      armCheckpoint:
+        service: outbox-relay
+        name: after_outbox_publish
+        eventId: relay-trigger-r7-1
+        stepId: publish-relay-trigger
+        occurrence: 1
+    - id: publish-relay-trigger
+      dependsOn: [arm-after-publish]
+      publish:
+        event: relay-trigger
+        topic: outbox-relay-trigger
+        partition: 0
+        key: relay-r7-1
+    - id: await-after-publish
+      dependsOn: [publish-relay-trigger]
+      timeout: 30s
+      await:
+        checkpoint:
+          service: outbox-relay
+          name: after_outbox_publish
+          eventId: relay-trigger-r7-1
+          stepId: publish-relay-trigger
+          occurrence: 1
+    - id: kill-relay
+      dependsOn: [await-after-publish]
+      stop:
+        service: outbox-relay
+    - id: restart-relay
+      dependsOn: [kill-relay]
+      restart:
+        service: outbox-relay
+    - id: observe-effects
+      dependsOn: [restart-relay]
+      timeout: 30s
+      observe:
+        observation: capture-effects
+    - id: observe-projection
+      dependsOn: [observe-effects]
+      timeout: 30s
+      observe:
+        observation: fulfillment-state
+    - id: observe-outbox
+      dependsOn: [observe-projection]
+      timeout: 30s
+      observe:
+        observation: outbox-state
+  quiescence:
+    timeout: 45s
+    stabilityWindow: 2s
+    conditions:
+      - id: all-groups-caught-up
+        type: groupLagZero
+        group: connected-workflow
+      - id: relay-idle
+        type: probeIdle
+        service: outbox-relay
+      - id: relay-checkpoints-clear
+        type: checkpointsClear
+        service: outbox-relay
+      - id: outbox-empty
+        type: outboxEmpty
+        service: outbox-relay
+      - id: effects-idle
+        type: effectsIdle
+        service: effect-sink
+      - id: connected-terminal-state
+        type: terminalState
+        service: fulfillment-projector
+        state: ready
+  observations:
+    - id: capture-effects
+      effects:
+        service: effect-sink
+        port: 8080
+        path: /v1/effects
+        mode: ordered
+    - id: fulfillment-state
+      http:
+        service: fulfillment-projector
+        port: 8080
+        path: /state
+        mode: ordered
+    - id: outbox-state
+      sql:
+        queryFile: queries/outbox-terminal.sql
+        orderBy: [order_id]
+        mode: ordered
+  invariants:
+    - id: one-outbox-row-per-business-operation
+      queryFile: queries/duplicate-outbox-business-operations.sql
+      classification: SEMANTIC_REGRESSION
+  normalization:
+    - id: fulfillment-event-provenance
+      observation: fulfillment-state
+      type: remove
+      pointer: /rows/0/eventId
+    - id: fulfillment-observed-time
+      observation: fulfillment-state
+      type: timestamp
+      pointer: /rows/0/updatedAt
+  limits:
+    maxSteps: 100
+    maxEvents: 100
+    maxRunDuration: 8m
+    confirmationAttempts: 2
+    minimizationTrials: 100
+    minimizationDuration: 10m
+  comparison:
+    allowedTargetDifferences:
+      - pointer: /spec/services/outbox-relay/image
+        rationale: Exercise the seeded relay that changes the event identity only on a proven publish retry.
+  control:
+    mode: outbox-crash
+    expectLate: false

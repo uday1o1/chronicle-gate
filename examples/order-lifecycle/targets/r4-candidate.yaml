@@ -4,7 +4,7 @@ metadata:
   name: order-lifecycle-r4
   description: Defective schema-default projector.
 spec:
-  databaseSchemaVersion: order-lifecycle-v2
+  databaseSchemaVersion: order-lifecycle-v3
   services:
     - name: fulfillment-projector
       image: ghcr.io/example/fulfillment-projector@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd

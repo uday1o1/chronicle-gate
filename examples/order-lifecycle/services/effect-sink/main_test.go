@@ -49,6 +49,10 @@ func TestEffectSinkEnforcesCredentialPrivileges(t *testing.T) {
 	if len(observation.Entries) != 1 || observation.Pending != 0 || len(observation.SHA256) != sha256.Size*2 {
 		t.Fatalf("unexpected observation: %#v", observation)
 	}
+	conflict := effectBody
+	conflict.Amount++
+	conflictResponse := requestEffect(t, testServer.URL, http.MethodPost, "/v1/effects", writerToken, conflict, http.StatusConflict)
+	_ = conflictResponse.Body.Close()
 }
 
 func requestEffect(t *testing.T, baseURL, method, path, token string, body any, status int) *http.Response {

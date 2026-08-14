@@ -136,6 +136,10 @@ func (server *server) appendEffect(writer http.ResponseWriter, request *http.Req
 	defer server.ledger.mu.Unlock()
 	for _, existing := range server.ledger.entries {
 		if existing.IdempotencyKey == received.IdempotencyKey {
+			if existing.EventID != received.EventID || existing.Kind != received.Kind || existing.BusinessKey != received.BusinessKey || existing.Amount != received.Amount {
+				writeError(writer, http.StatusConflict, "idempotency key conflicts with the recorded semantic effect")
+				return
+			}
 			writeJSON(writer, http.StatusOK, existing)
 			return
 		}

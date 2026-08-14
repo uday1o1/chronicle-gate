@@ -147,15 +147,21 @@ func CollectKafka(ctx context.Context, config KafkaConfig) (Evidence, error) {
 						projectionErr = fmt.Errorf("kafka observer received non-monotonic offset %d", record.Offset)
 						return
 					}
-					rangeEvidence.Records = append(rangeEvidence.Records, BrokerRecord{
-						Offset: record.Offset, Timestamp: record.Timestamp.UTC().Format(time.RFC3339Nano),
-						LeaderEpoch: record.LeaderEpoch, TimestampExcluded: true,
-					})
 					projection, recordExcluded, err := projectRecord(config.Root, declaration, record)
 					if err != nil {
 						projectionErr = err
 						return
 					}
+					keyOrder, err := topLevelJSONKeyOrder(record.Value)
+					if err != nil {
+						projectionErr = fmt.Errorf("inspect JSON wire order at offset %d: %w", record.Offset, err)
+						return
+					}
+					rangeEvidence.Records = append(rangeEvidence.Records, BrokerRecord{
+						Offset: record.Offset, Timestamp: record.Timestamp.UTC().Format(time.RFC3339Nano),
+						LeaderEpoch: record.LeaderEpoch, TimestampExcluded: true,
+						TopLevelJSONKeyOrder: keyOrder, TraceContextFingerprints: traceContextFingerprints(record.Headers),
+					})
 					semantic = append(semantic, projection)
 					excluded = append(excluded, recordExcluded...)
 					lastOffset = record.Offset
@@ -200,6 +206,57 @@ func CollectKafka(ctx context.Context, config KafkaConfig) (Evidence, error) {
 		evidence.Count = len(semantic)
 	}
 	return evidence, err
+}
+
+func topLevelJSONKeyOrder(document []byte) ([]string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(document))
+	decoder.UseNumber()
+	opening, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
+		return nil, errors.New("top-level JSON value is not an object")
+	}
+	keys := []string{}
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil, errors.New("JSON object key is not a string")
+		}
+		keys = append(keys, key)
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
+		}
+	}
+	closing, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if delimiter, ok := closing.(json.Delim); !ok || delimiter != '}' {
+		return nil, errors.New("top-level JSON object is not closed")
+	}
+	if token, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("unexpected trailing JSON token %v", token)
+	}
+	return keys, nil
+}
+
+func traceContextFingerprints(headers []kgo.RecordHeader) []TraceContextFingerprint {
+	result := []TraceContextFingerprint{}
+	for index, header := range headers {
+		if !exactASCII(header.Key) || header.Key != "traceparent" && header.Key != "tracestate" && header.Key != "baggage" {
+			continue
+		}
+		digest := sha256.Sum256(header.Value)
+		result = append(result, TraceContextFingerprint{Name: header.Key, WireIndex: index, SHA256: hex.EncodeToString(digest[:])})
+	}
+	return result
 }
 
 func projectRecord(root string, declaration spec.KafkaObservation, record *kgo.Record) (map[string]any, []MetadataExclusion, error) {
