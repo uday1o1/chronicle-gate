@@ -6,6 +6,8 @@ GOLANGCI_LINT_IMAGE := docker.io/golangci/golangci-lint@sha256:5cceeef04e53efe14
 REFERENCE_BASELINE_IMAGE := chronicle-gate/fulfillment-projector:baseline-m2
 REFERENCE_CANDIDATE_IMAGE := chronicle-gate/fulfillment-projector:candidate-r1-m2
 REFERENCE_FLAKY_IMAGE := chronicle-gate/fulfillment-projector:flaky-r1-m3
+REFERENCE_R4_BASELINE_IMAGE := chronicle-gate/fulfillment-projector:baseline-r4-m5
+REFERENCE_R4_CANDIDATE_IMAGE := chronicle-gate/fulfillment-projector:candidate-r4-m5
 REFERENCE_WORKFLOW_BASELINE_IMAGE := chronicle-gate/order-workflow:baseline-m4
 REFERENCE_WORKFLOW_CANDIDATE_IMAGE := chronicle-gate/order-workflow:candidate-r2-m4
 REFERENCE_EFFECT_SINK_IMAGE := chronicle-gate/effect-sink:baseline-m4
@@ -67,10 +69,12 @@ reference-images:
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=baseline --label dev.chronicle.reference=baseline -t $(REFERENCE_BASELINE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r1 --label dev.chronicle.reference=candidate-r1 -t $(REFERENCE_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=flaky-r1 --label dev.chronicle.reference=flaky-r1 -t $(REFERENCE_FLAKY_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
+	docker build --pull=false --build-arg PROJECTOR_VARIANT=baseline-r4 --label dev.chronicle.reference=baseline-r4 -t $(REFERENCE_R4_BASELINE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
+	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r4 --label dev.chronicle.reference=candidate-r4 -t $(REFERENCE_R4_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=baseline --label dev.chronicle.reference=workflow-baseline -t $(REFERENCE_WORKFLOW_BASELINE_IMAGE) -f examples/order-lifecycle/services/order-workflow/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r2 --label dev.chronicle.reference=workflow-candidate-r2 -t $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/order-workflow/Dockerfile .
 	docker build --pull=false --label dev.chronicle.reference=effect-sink -t $(REFERENCE_EFFECT_SINK_IMAGE) -f examples/order-lifecycle/services/effect-sink/Dockerfile .
-	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))" --flaky-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_FLAKY_IMAGE))" --workflow-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_BASELINE_IMAGE))" --workflow-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE))" --effect-sink-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_EFFECT_SINK_IMAGE))"
+	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))" --flaky-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_FLAKY_IMAGE))" --r4-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_BASELINE_IMAGE))" --r4-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_CANDIDATE_IMAGE))" --workflow-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_BASELINE_IMAGE))" --workflow-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE))" --effect-sink-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_EFFECT_SINK_IMAGE))"
 
 test-integration: reference-images build
 	@mkdir -p dist run

@@ -18,6 +18,7 @@ import (
 	"github.com/uday1o1/chronicle-gate/internal/broker"
 	"github.com/uday1o1/chronicle-gate/internal/database"
 	"github.com/uday1o1/chronicle-gate/internal/effects"
+	"github.com/uday1o1/chronicle-gate/internal/observe"
 	"github.com/uday1o1/chronicle-gate/internal/probeclient"
 	"github.com/uday1o1/chronicle-gate/internal/runlog"
 	cruntime "github.com/uday1o1/chronicle-gate/internal/runtime"
@@ -33,6 +34,7 @@ type precisePlan struct {
 	checkpoints []spec.CheckpointSelector
 	mode        string
 	observation spec.Observation
+	identity    observe.Identity
 	invariant   spec.Invariant
 }
 
@@ -82,6 +84,7 @@ func buildPrecisePlan(scenario spec.Scenario, target spec.Target) (precisePlan, 
 			releases++
 		case step.Observe != nil:
 			observationID = step.Observe.Observation
+			plan.identity = observe.Identity{StepID: step.ID, ObserverID: observationID, Occurrence: 1}
 		}
 	}
 	if plan.publish.StepID == "" || len(plan.checkpoints) == 0 || observationID == "" {
@@ -448,6 +451,29 @@ func executePreciseAttempt(ctx context.Context, config preciseAttemptConfig) (ev
 		return evidence, errors.New("precise processed-event invariant failed")
 	}
 	evidence.ObservationRows = effectRows(observation)
+	rawObservation := map[string]any{"entries": evidence.ObservationRows, "pending": observation.Pending}
+	normalized, applied, err := observe.Normalize(rawObservation, observationRules(config.Scenario, config.Plan.observation.ID))
+	if err != nil {
+		return evidence, fmt.Errorf("normalize effect observation: %w", err)
+	}
+	observerEvidence, err := observe.NewEvidence(
+		config.Plan.identity,
+		"effects",
+		config.Plan.observation.Effects.Mode,
+		observe.Source{Effects: &observe.HTTPSource{
+			Service:  config.Plan.observation.Effects.Service,
+			Port:     config.Plan.observation.Effects.Port,
+			Path:     config.Plan.observation.Effects.Path,
+			Endpoint: sinkEndpoint,
+		}},
+		normalized,
+		applied,
+		nil,
+	)
+	if err != nil {
+		return evidence, fmt.Errorf("build effect observation evidence: %w", err)
+	}
+	evidence.Observations = append(evidence.Observations, observerEvidence)
 	evidence.SchemaAfterObservation, err = config.Database.FingerprintAttempt(ctx, attempt)
 	if err != nil {
 		return evidence, err
@@ -461,12 +487,8 @@ func executePreciseAttempt(ctx context.Context, config preciseAttemptConfig) (ev
 			return evidence, err
 		}
 	}
-	observationArtifact := map[string]any{
-		"apiVersion": spec.APIVersion, "kind": "Observation", "attemptId": attemptID,
-		"observationId": config.Plan.observation.ID, "effects": observation, "probeDeliveries": evidence.ProbeDeliveries,
-		"quiescence": quiescence,
-	}
-	if err := artifact.WritePublicJSON(filepath.Join(config.Output, "observations", attemptID, config.Plan.observation.ID+".json"), observationArtifact, config.SecretValues); err != nil {
+	artifactName := fmt.Sprintf("%s--%s--%d.json", config.Plan.identity.StepID, config.Plan.identity.ObserverID, config.Plan.identity.Occurrence)
+	if err := artifact.WritePublicJSON(filepath.Join(config.Output, "observations", attemptID, artifactName), observerEvidence, config.SecretValues); err != nil {
 		return evidence, err
 	}
 	evidence.Status = "COMPLETE"
@@ -620,7 +642,7 @@ func waitPreciseQuiescence(ctx context.Context, config preciseAttemptConfig, att
 
 func requireCanonicalEffect(entry effects.Entry, published broker.RecordIdentity, event spec.CloudEvent) error {
 	amount, ok := exactInt64(event.Data["amount"])
-	if !ok || entry.EventID != event.ID || entry.BusinessKey != event.AggregateID || entry.Amount != amount || entry.SourceTopic != published.Topic || entry.SourcePartition != published.Partition || entry.SourceOffset != published.Offset {
+	if !ok || entry.Kind != "payment_capture" || entry.EventID != event.ID || entry.BusinessKey != event.AggregateID || entry.Amount != amount || entry.SourceTopic != published.Topic || entry.SourcePartition != published.Partition || entry.SourceOffset != published.Offset {
 		return errors.New("effect ledger entry does not retain the published business and broker identity")
 	}
 	return nil
@@ -652,7 +674,7 @@ func effectRows(observation effects.Observation) []map[string]any {
 	rows := make([]map[string]any, 0, len(observation.Entries))
 	for _, entry := range observation.Entries {
 		rows = append(rows, map[string]any{
-			"event_id": entry.EventID, "business_key": entry.BusinessKey, "amount": entry.Amount,
+			"kind": entry.Kind, "event_id": entry.EventID, "business_key": entry.BusinessKey, "amount": entry.Amount,
 			"idempotency_key": entry.IdempotencyKey, "source_topic": entry.SourceTopic,
 			"source_partition": entry.SourcePartition, "source_offset": entry.SourceOffset,
 		})

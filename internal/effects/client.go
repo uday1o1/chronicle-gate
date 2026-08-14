@@ -15,6 +15,7 @@ import (
 )
 
 type Entry struct {
+	Kind            string `json:"kind"`
 	EventID         string `json:"eventId"`
 	BusinessKey     string `json:"businessKey"`
 	Amount          int64  `json:"amount"`

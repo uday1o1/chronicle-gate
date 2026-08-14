@@ -1,0 +1,27 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Target
+metadata:
+  name: order-lifecycle-r4
+  description: Correct schema-default projector.
+spec:
+  databaseSchemaVersion: order-lifecycle-v1
+  services:
+    - name: fulfillment-projector
+      image: ghcr.io/example/fulfillment-projector@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      command: []
+      args: []
+      environment: {}
+      secretEnvironment: {}
+      health:
+        type: http
+        path: /healthz
+        port: 8080
+        timeout: 20s
+        interval: 250ms
+      probe:
+        enabled: false
+      resources:
+        cpus: 1
+        memoryBytes: 268435456
+        pids: 128
+      dependencies: []

@@ -16,7 +16,7 @@ func TestEffectSinkEnforcesCredentialPrivileges(t *testing.T) {
 	application := &server{ledger: &ledger{}, writerToken: sha256.Sum256([]byte(writerToken)), observerToken: sha256.Sum256([]byte(observerToken))}
 	testServer := httptest.NewServer(application.handler())
 	defer testServer.Close()
-	effectBody := effect{EventID: "payment-1", BusinessKey: "order-1", Amount: 1250, IdempotencyKey: "payment-1", SourceTopic: "payments", SourcePartition: 0, SourceOffset: 0}
+	effectBody := effect{Kind: "payment_capture", EventID: "payment-1", BusinessKey: "order-1", Amount: 1250, IdempotencyKey: "payment-1", SourceTopic: "payments", SourcePartition: 0, SourceOffset: 0}
 
 	for _, test := range []struct {
 		method string

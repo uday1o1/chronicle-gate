@@ -38,19 +38,21 @@ func (err *CleanupError) Unwrap() error {
 
 // Environment contains the shared broker and database for one run.
 type Environment struct {
-	RunID                 string
-	Network               *testcontainers.DockerNetwork
-	Redpanda              *redpanda.Container
-	Postgres              *postgres.PostgresContainer
-	HostBroker            string
-	InternalBroker        string
-	HostPostgresDSN       string
-	InternalPostgres      string
-	PostgresAdminUser     string
-	PostgresAdminPassword string
-	NetworkName           string
-	cleanupMutex          sync.Mutex
-	cleaned               bool
+	RunID                  string
+	Network                *testcontainers.DockerNetwork
+	Redpanda               *redpanda.Container
+	Postgres               *postgres.PostgresContainer
+	HostBroker             string
+	InternalBroker         string
+	HostSchemaRegistry     string
+	InternalSchemaRegistry string
+	HostPostgresDSN        string
+	InternalPostgres       string
+	PostgresAdminUser      string
+	PostgresAdminPassword  string
+	NetworkName            string
+	cleanupMutex           sync.Mutex
+	cleaned                bool
 }
 
 func StartEnvironment(ctx context.Context, runID, lockPath string) (_ *Environment, resultErr error) {
@@ -78,11 +80,12 @@ func StartEnvironment(ctx context.Context, runID, lockPath string) (_ *Environme
 		return nil, err
 	}
 	environment := &Environment{
-		RunID:                 runID,
-		InternalBroker:        "redpanda:9094",
-		InternalPostgres:      "postgres:5432",
-		PostgresAdminUser:     "chronicle_admin",
-		PostgresAdminPassword: password,
+		RunID:                  runID,
+		InternalBroker:         "redpanda:9094",
+		InternalSchemaRegistry: "http://redpanda:8081",
+		InternalPostgres:       "postgres:5432",
+		PostgresAdminUser:      "chronicle_admin",
+		PostgresAdminPassword:  password,
 	}
 	defer func() {
 		if resultErr != nil {
@@ -116,6 +119,10 @@ func StartEnvironment(ctx context.Context, runID, lockPath string) (_ *Environme
 	environment.HostBroker, err = environment.Redpanda.KafkaSeedBroker(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve host Redpanda endpoint: %w", err)
+	}
+	environment.HostSchemaRegistry, err = environment.Redpanda.SchemaRegistryAddress(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve host Redpanda Schema Registry endpoint: %w", err)
 	}
 
 	environment.Postgres, err = postgres.Run(ctx, postgresImage,

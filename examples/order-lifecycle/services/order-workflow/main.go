@@ -44,6 +44,7 @@ type cloudEvent struct {
 }
 
 type effect struct {
+	Kind            string `json:"kind"`
 	EventID         string `json:"eventId"`
 	BusinessKey     string `json:"businessKey"`
 	Amount          int64  `json:"amount"`
@@ -208,7 +209,7 @@ func (workflow *workflow) process(ctx context.Context, record *kgo.Record) error
 			idempotencyKey += "-" + hex.EncodeToString(suffix)
 		}
 		if err := workflow.sendEffect(ctx, effect{
-			EventID: event.ID, BusinessKey: event.AggregateID, Amount: int64(amountNumber), IdempotencyKey: idempotencyKey,
+			Kind: "payment_capture", EventID: event.ID, BusinessKey: event.AggregateID, Amount: int64(amountNumber), IdempotencyKey: idempotencyKey,
 			SourceTopic: record.Topic, SourcePartition: record.Partition, SourceOffset: record.Offset,
 		}); err != nil {
 			return err

@@ -1,0 +1,108 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: explicit-schema-default-control
+  description: An explicit business default produces the same result in both targets.
+spec:
+  seed: {}
+  clock:
+    start: "2026-08-13T00:00:00Z"
+  events:
+    fulfillment-requested:
+      specversion: "1.0"
+      id: fulfillment-requested-control-1
+      source: /orders/order-control-1
+      type: dev.chronicle.fulfillment.requested
+      subject: order-control-1
+      time: "2026-08-13T00:00:02Z"
+      datacontenttype: application/json
+      aggregateid: order-control-1
+      aggregateversion: 1
+      dataschema: schemas/fulfillment-requested-v2.schema.json
+      registry:
+        subject: fulfillment-requested-value
+        schemaType: JSON
+        compatibility: BACKWARD
+        history: [schemas/fulfillment-requested-v1.schema.json]
+      data:
+        loggingContext: optional-control-field
+        fulfillmentMode: standard
+        orderId: order-control-1
+  steps:
+    - id: publish-fulfillment
+      publish:
+        event: fulfillment-requested
+        topic: fulfillment
+        partition: 0
+        key: order-control-1
+    - id: observe-sql
+      dependsOn: [publish-fulfillment]
+      timeout: 15s
+      observe:
+        observation: fulfillment-sql
+    - id: observe-kafka
+      dependsOn: [observe-sql]
+      timeout: 15s
+      observe:
+        observation: fulfillment-output
+    - id: observe-http
+      dependsOn: [observe-kafka]
+      timeout: 15s
+      observe:
+        observation: fulfillment-http
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 2s
+    conditions:
+      - id: projector-lag
+        type: groupLagZero
+        group: fulfillment-projector
+      - id: terminal-ready
+        type: terminalState
+        service: fulfillment-projector
+        state: ready
+  observations:
+    - id: fulfillment-sql
+      sql:
+        queryFile: queries/fulfillment-projection-refactored.sql
+        orderBy: [order_id]
+        mode: ordered
+    - id: fulfillment-output
+      kafka:
+        topic: fulfillment-results
+        schemaFile: schemas/fulfillment-ready.schema.json
+        partition: 0
+        startOffset: 0
+        endOffset: 1
+        mode: keyed
+        keyPointer: /event/aggregateid
+    - id: fulfillment-http
+      http:
+        service: fulfillment-projector
+        port: 8080
+        path: /state
+        mode: ordered
+  invariants:
+    - id: fulfillment-mode-is-declared
+      queryFile: queries/invalid-fulfillment-mode.sql
+      classification: SEMANTIC_REGRESSION
+  normalization:
+    - id: sql-updated-at
+      observation: fulfillment-sql
+      type: timestamp
+      pointer: /rows/0/updated_at
+    - id: output-event-time
+      observation: fulfillment-output
+      type: timestamp
+      pointer: /0/event/time
+    - id: http-updated-at
+      observation: fulfillment-http
+      type: timestamp
+      pointer: /rows/0/updatedAt
+  limits:
+    maxSteps: 100
+    maxEvents: 100
+    maxRunDuration: 6m
+    confirmationAttempts: 2
+    minimizationTrials: 100
+    minimizationDuration: 10m

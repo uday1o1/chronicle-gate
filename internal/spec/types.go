@@ -68,20 +68,29 @@ func (duration *Duration) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type CloudEvent struct {
-	SpecVersion      string         `json:"specversion" yaml:"specversion"`
-	ID               string         `json:"id" yaml:"id"`
-	Source           string         `json:"source" yaml:"source"`
-	Type             string         `json:"type" yaml:"type"`
-	Subject          string         `json:"subject" yaml:"subject"`
-	Time             string         `json:"time" yaml:"time"`
-	DataContentType  string         `json:"datacontenttype" yaml:"datacontenttype"`
-	Data             map[string]any `json:"data" yaml:"data"`
-	AggregateID      string         `json:"aggregateid,omitempty" yaml:"aggregateid,omitempty"`
-	AggregateVersion int64          `json:"aggregateversion,omitempty" yaml:"aggregateversion,omitempty"`
-	CorrelationID    string         `json:"correlationid,omitempty" yaml:"correlationid,omitempty"`
-	CausationID      string         `json:"causationid,omitempty" yaml:"causationid,omitempty"`
-	SchemaVersion    string         `json:"schemaversion,omitempty" yaml:"schemaversion,omitempty"`
-	DataSchema       string         `json:"dataschema,omitempty" yaml:"dataschema,omitempty"`
+	SpecVersion      string               `json:"specversion" yaml:"specversion"`
+	ID               string               `json:"id" yaml:"id"`
+	Source           string               `json:"source" yaml:"source"`
+	Type             string               `json:"type" yaml:"type"`
+	Subject          string               `json:"subject" yaml:"subject"`
+	Time             string               `json:"time" yaml:"time"`
+	DataContentType  string               `json:"datacontenttype" yaml:"datacontenttype"`
+	Data             map[string]any       `json:"data" yaml:"data"`
+	AggregateID      string               `json:"aggregateid,omitempty" yaml:"aggregateid,omitempty"`
+	AggregateVersion int64                `json:"aggregateversion,omitempty" yaml:"aggregateversion,omitempty"`
+	CorrelationID    string               `json:"correlationid,omitempty" yaml:"correlationid,omitempty"`
+	CausationID      string               `json:"causationid,omitempty" yaml:"causationid,omitempty"`
+	SchemaVersion    string               `json:"schemaversion,omitempty" yaml:"schemaversion,omitempty"`
+	DataSchema       string               `json:"dataschema,omitempty" yaml:"dataschema,omitempty"`
+	Registry         *RegistryDeclaration `json:"registry,omitempty" yaml:"registry,omitempty"`
+}
+
+// RegistryDeclaration describes reproducible Schema Registry history for an event.
+type RegistryDeclaration struct {
+	Subject       string   `json:"subject" yaml:"subject"`
+	SchemaType    string   `json:"schemaType" yaml:"schemaType"`
+	Compatibility string   `json:"compatibility" yaml:"compatibility"`
+	History       []string `json:"history" yaml:"history"`
 }
 
 type Comparison struct {

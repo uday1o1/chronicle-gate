@@ -146,24 +146,37 @@ func (observation Observation) TypeCount() int {
 }
 
 type SQLObservation struct {
-	QueryFile string   `json:"queryFile" yaml:"queryFile"`
-	OrderBy   []string `json:"orderBy" yaml:"orderBy"`
+	QueryFile  string   `json:"queryFile" yaml:"queryFile"`
+	OrderBy    []string `json:"orderBy" yaml:"orderBy"`
+	Mode       string   `json:"mode" yaml:"mode"`
+	KeyPointer string   `json:"keyPointer,omitempty" yaml:"keyPointer,omitempty"`
 }
 
 type KafkaObservation struct {
-	Topic       string `json:"topic" yaml:"topic"`
-	StartOffset int64  `json:"startOffset" yaml:"startOffset"`
-	EndOffset   int64  `json:"endOffset" yaml:"endOffset"`
-	Mode        string `json:"mode" yaml:"mode"`
-	KeyPointer  string `json:"keyPointer,omitempty" yaml:"keyPointer,omitempty"`
+	Topic              string   `json:"topic" yaml:"topic"`
+	SchemaFile         string   `json:"schemaFile" yaml:"schemaFile"`
+	Partition          int      `json:"partition" yaml:"partition"`
+	StartOffset        int64    `json:"startOffset" yaml:"startOffset"`
+	EndOffset          int64    `json:"endOffset" yaml:"endOffset"`
+	Mode               string   `json:"mode" yaml:"mode"`
+	KeyPointer         string   `json:"keyPointer,omitempty" yaml:"keyPointer,omitempty"`
+	NonsemanticHeaders []string `json:"nonsemanticHeaders,omitempty" yaml:"nonsemanticHeaders,omitempty"`
 }
 
 type HTTPObservation struct {
-	URL string `json:"url" yaml:"url"`
+	Service    string `json:"service" yaml:"service"`
+	Port       int    `json:"port" yaml:"port"`
+	Path       string `json:"path" yaml:"path"`
+	Mode       string `json:"mode" yaml:"mode"`
+	KeyPointer string `json:"keyPointer,omitempty" yaml:"keyPointer,omitempty"`
 }
 
 type EffectsObservation struct {
-	URL string `json:"url" yaml:"url"`
+	Service    string `json:"service" yaml:"service"`
+	Port       int    `json:"port" yaml:"port"`
+	Path       string `json:"path" yaml:"path"`
+	Mode       string `json:"mode" yaml:"mode"`
+	KeyPointer string `json:"keyPointer,omitempty" yaml:"keyPointer,omitempty"`
 }
 
 type Invariant struct {

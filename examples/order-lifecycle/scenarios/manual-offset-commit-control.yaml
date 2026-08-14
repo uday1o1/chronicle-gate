@@ -111,7 +111,10 @@ spec:
   observations:
     - id: capture-effects
       effects:
-        url: http://127.0.0.1/effects
+        service: effect-sink
+        port: 8080
+        path: /v1/effects
+        mode: ordered
   invariants:
     - id: one-capture-per-business-operation
       queryFile: queries/duplicate-processed-events.sql

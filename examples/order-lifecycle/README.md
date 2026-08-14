@@ -1,6 +1,6 @@
-# Order lifecycle R1 and R2 vertical slices
+# Order lifecycle seeded qualifications
 
-This example qualifies an inventory projection invariant and a precise external-effect crash invariant against correct baselines and seeded candidates.
+This example qualifies inventory projection, precise external-effect crash, and schema-default invariants against correct baselines and seeded candidates.
 
 ## What the run proves
 
@@ -38,10 +38,11 @@ It verifies that the committed position is still `0`, checks that the group cont
 After restart, a new probe process instance must report the same orchestrator-owned logical time and a different process identifier.
 The second probe receipt must identify the same topic, partition, offset, key, event ID, and event digest as the first receipt.
 
-The baseline sink observation contains one stable effect entry.
+The baseline sink observation contains one stable `payment_capture` effect entry.
 The seeded R2 candidate contains two entries with different idempotency keys for one business key.
 The exact count-based failure signature remains stable even though the defective random keys differ between confirmation attempts.
-All effect entries retain amount and source broker metadata, and the observer verifies the canonical ledger digest before comparison.
+All effect entries retain kind, business key, amount, idempotency key, and source broker metadata, and the observer verifies the canonical ledger digest before comparison.
+The effect observation also uses the same versioned canonical evidence envelope as SQL, Kafka, and HTTP observations.
 
 `manual-offset-commit-control.yaml` arms both `before_offset_commit` and `after_offset_commit`.
 It proves the group position remains `0` at the first gate, releases processing, and proves the position is `1` before the second gate becomes visible.
@@ -54,11 +55,29 @@ Each service receives one private read-only directory containing only its requir
 The sink writer credential cannot observe the ledger, and the observer credential cannot append effects.
 Neither service receives the Docker socket.
 
+## R4 compatible schema and semantic default
+
+`r4-schema-default-drift.yaml` publishes an event validated by a new JSON Schema that adds optional `fulfillmentMode` and `loggingContext` fields.
+ChronicleGate creates a fresh attempt-scoped Registry subject, registers the predecessor and current schemas, verifies read-back hashes and versions, and records a positive `BACKWARD` compatibility response.
+The baseline applies `standard` when `fulfillmentMode` is omitted, while the seeded candidate applies `expedited`.
+The first stable failure is the SQL observer difference at `/rows/0/fulfillment_mode`, and Kafka and HTTP retain corroborating projections.
+
+The observation inventory is joined by step ID, observer ID, and one-based occurrence.
+Physical topic names, database names, endpoints, offsets, and Registry subject prefixes remain source evidence and are not baseline-to-candidate equality inputs.
+SQL uses a read-only role and checked-in ordered queries.
+Kafka freezes an explicit attempt-local offset range, consumes without a group or commits, preserves arbitrary header bytes as base64, and excludes only broker metadata and recognized trace headers by default.
+HTTP accepts only the declared service, port, and path through a loopback mapping and requires strict bounded JSON.
+
+`r4-explicit-default-control.yaml` explicitly supplies `standard`, adds the optional logging field, and uses a refactored query with the same projection.
+Both targets must compare equal.
+Timestamp fields are normalized only at exact authored JSON Pointers, and every application is retained in JSON, text, JUnit, and HTML reports.
+`r4-invalid-output-schema.yaml` proves the runtime classification boundary: a valid baseline followed by the seeded invalid candidate is `SCHEMA_REGRESSION`, while an invalid baseline is `UNRESOLVED`.
+
 ## Current boundaries
 
 The generated local image IDs are content-addressed but not registry-resolvable or cross-platform portable.
 They are accepted only with `--development-local-images`.
-Milestone 5 will complete the broader observer and schema-default corpus beyond the portfolio-ready core.
+Cross-stream ordering, late-event, and outbox scenarios remain extended V1 work in Milestones 6 and 7.
 
 ## Stable reduction and replay
 

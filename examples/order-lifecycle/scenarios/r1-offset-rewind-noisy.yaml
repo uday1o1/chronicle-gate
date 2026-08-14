@@ -90,6 +90,7 @@ spec:
       sql:
         queryFile: queries/inventory-reservations.sql
         orderBy: [order_id, sku]
+        mode: ordered
   invariants:
     - id: no-duplicate-reservations
       queryFile: queries/duplicate-reservations.sql

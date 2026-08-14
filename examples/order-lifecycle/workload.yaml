@@ -35,13 +35,18 @@ spec:
     - id: inventory-events
       kafka:
         topic: inventory-events
+        schemaFile: scenarios/schemas/inventory-requested.schema.json
+        partition: 0
         startOffset: 0
         endOffset: 100
         mode: keyed
         keyPointer: /orderId
     - id: capture-effects
       effects:
-        url: http://127.0.0.1/effects
+        service: effect-sink
+        port: 8080
+        path: /v1/effects
+        mode: ordered
   invariants:
     - id: one-capture-per-business-operation
       queryFile: scenarios/queries/duplicate-processed-events.sql

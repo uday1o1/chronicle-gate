@@ -15,6 +15,8 @@ func main() {
 	baselineImage := flag.String("baseline-image", "", "content-addressed baseline Docker image ID")
 	candidateImage := flag.String("candidate-image", "", "content-addressed candidate Docker image ID")
 	flakyImage := flag.String("flaky-image", "", "content-addressed deterministic flaky Docker image ID")
+	r4BaselineImage := flag.String("r4-baseline-image", "", "content-addressed R4 baseline Docker image ID")
+	r4CandidateImage := flag.String("r4-candidate-image", "", "content-addressed R4 candidate Docker image ID")
 	workflowBaselineImage := flag.String("workflow-baseline-image", "", "content-addressed baseline workflow Docker image ID")
 	workflowCandidateImage := flag.String("workflow-candidate-image", "", "content-addressed R2 workflow Docker image ID")
 	effectSinkImage := flag.String("effect-sink-image", "", "content-addressed effect sink Docker image ID")
@@ -23,6 +25,7 @@ func main() {
 
 	for name, image := range map[string]string{
 		"baseline": *baselineImage, "candidate": *candidateImage, "flaky": *flakyImage,
+		"R4 baseline": *r4BaselineImage, "R4 candidate": *r4CandidateImage,
 		"workflow baseline": *workflowBaselineImage, "workflow candidate": *workflowCandidateImage, "effect sink": *effectSinkImage,
 	} {
 		if !imagelock.IsLocalImageID(image) {
@@ -40,6 +43,12 @@ func main() {
 	}
 	if err := writeTarget(filepath.Join(*output, "flaky.yaml"), *flakyImage); err != nil {
 		fatalf("write flaky target: %v", err)
+	}
+	if err := writeTarget(filepath.Join(*output, "r4-baseline.yaml"), *r4BaselineImage); err != nil {
+		fatalf("write R4 baseline target: %v", err)
+	}
+	if err := writeTarget(filepath.Join(*output, "r4-candidate.yaml"), *r4CandidateImage); err != nil {
+		fatalf("write R4 candidate target: %v", err)
 	}
 	if err := writePreciseTarget(filepath.Join(*output, "r2-baseline.yaml"), *workflowBaselineImage, *effectSinkImage); err != nil {
 		fatalf("write R2 baseline target: %v", err)

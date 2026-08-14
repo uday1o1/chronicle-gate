@@ -20,6 +20,7 @@ import (
 )
 
 type effect struct {
+	Kind            string `json:"kind"`
 	EventID         string `json:"eventId"`
 	BusinessKey     string `json:"businessKey"`
 	Amount          int64  `json:"amount"`
@@ -127,7 +128,7 @@ func (server *server) appendEffect(writer http.ResponseWriter, request *http.Req
 		writeError(writer, http.StatusBadRequest, "invalid effect")
 		return
 	}
-	if received.EventID == "" || received.BusinessKey == "" || received.Amount <= 0 || received.IdempotencyKey == "" || received.SourceTopic == "" || received.SourceOffset < 0 {
+	if received.Kind == "" || received.EventID == "" || received.BusinessKey == "" || received.Amount <= 0 || received.IdempotencyKey == "" || received.SourceTopic == "" || received.SourceOffset < 0 {
 		writeError(writer, http.StatusBadRequest, "effect is incomplete")
 		return
 	}

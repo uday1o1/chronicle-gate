@@ -3,8 +3,8 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestones 0 through 4 are complete, including the portfolio-ready core checkpoint.
-Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, and manual synchronous offset-commit proof pass their local acceptance gates.
+Milestones 0 through 5 are complete, including the portfolio-ready core checkpoint and the complete V1 observer model.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, and schema-compatible R4 default drift pass their local acceptance gates.
 
 ## Bootstrap
 
@@ -47,7 +47,7 @@ All checked-in scenario, target, workload, result, and bundle examples pass both
 
 The R1 walkthrough requires Docker with at least 4 CPUs, 6 GiB of memory, and the locked Redpanda and PostgreSQL images available for the local architecture.
 The reference image build is a repository-trusted development workflow and runs before `chronicle run`.
-It creates distinct correct and seeded-defect images for R1 and R2, creates the local effect sink, and generates ignored target manifests containing exact image IDs.
+It creates distinct correct and seeded-defect images for R1, R2, and R4, creates the local effect sink, and generates ignored target manifests containing exact image IDs.
 
 ```sh
 make reference-images
@@ -135,6 +135,43 @@ The nearby manual-commit control must pass with exit code `0`:
 The control blocks at `before_offset_commit` while the committed position remains `0`.
 After release, the service performs a synchronous record commit and independently reads the group offset until it is exactly `1` before exposing `after_offset_commit`.
 See [`docs/portfolio-core.md`](docs/portfolio-core.md) for the measured checkpoint evidence and clean-source reproduction procedure.
+
+## Run the R4 schema-default qualification
+
+R4 registers a predecessor and current JSON Schema under a fresh Registry subject and requires a positive `BACKWARD` compatibility result.
+The new optional `fulfillmentMode` field is structurally compatible, but the seeded candidate applies `expedited` when the field is absent while the baseline preserves the declared `standard` behavior.
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r4-schema-default-drift.yaml \
+  --baseline examples/order-lifecycle/targets/generated/r4-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/r4-candidate.yaml \
+  --out run/r4 \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+Exit code `2` is expected with the checked-in `/rows/0/fulfillment_mode` signature.
+Each attempt executes the exact declared SQL, Kafka, and HTTP observation inventory once.
+Reports include every timestamp normalization with its logical observation identity, authored pointer, and affected count.
+The Registry evidence retains source and self-contained schema hashes, assigned versions and IDs, predecessor coverage, and compatibility responses.
+The integration matrix also proves that a candidate-only invalid runtime output becomes a confirmed `SCHEMA_REGRESSION`, while the same invalid output from the baseline becomes `UNRESOLVED` before candidate execution.
+
+The explicit-default control must pass with exit code `0` even though it includes a compatible optional logging field and uses an equivalent refactored SQL projection:
+
+```sh
+./bin/chronicle run \
+  --scenario examples/order-lifecycle/scenarios/r4-explicit-default-control.yaml \
+  --baseline examples/order-lifecycle/targets/generated/r4-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/r4-candidate.yaml \
+  --out run/r4-control \
+  --development-local-images \
+  --no-minimize \
+  --json
+```
+
+See [`docs/observer-model.md`](docs/observer-model.md) for observer comparison, Kafka range, normalization, and schema-classification boundaries.
 
 ## License
 

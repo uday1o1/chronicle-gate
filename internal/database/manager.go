@@ -165,12 +165,20 @@ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 event_id text NOT NULL,
 published_at timestamptz
 )`,
+		`CREATE TABLE fulfillment_projection (
+order_id text PRIMARY KEY,
+event_id text NOT NULL,
+fulfillment_mode text NOT NULL,
+status text NOT NULL,
+updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+)`,
 		"RESET ROLE",
 		"REVOKE ALL ON SCHEMA public FROM PUBLIC",
 		"GRANT CONNECT ON DATABASE " + templateDatabase + " TO " + serviceRole + ", " + observerRole,
 		"GRANT USAGE ON SCHEMA public TO " + serviceRole + ", " + observerRole,
 		"GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO " + serviceRole,
 		"GRANT UPDATE (commit_confirmed) ON delivery_ledger TO " + serviceRole,
+		"GRANT UPDATE (event_id, fulfillment_mode, status, updated_at) ON fulfillment_projection TO " + serviceRole,
 		"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO " + serviceRole,
 		"GRANT SELECT ON ALL TABLES IN SCHEMA public TO " + observerRole,
 	}
@@ -328,27 +336,47 @@ ORDER BY kind, object_name, definition`)
 }
 
 func Query(ctx context.Context, dsn, query string) ([]map[string]any, error) {
+	result, err := QueryDetailed(ctx, dsn, query)
+	return result.Rows, err
+}
+
+type QueryColumn struct {
+	Name string `json:"name"`
+	OID  uint32 `json:"oid"`
+}
+
+type QueryResult struct {
+	Rows    []map[string]any `json:"rows"`
+	Columns []QueryColumn    `json:"columns"`
+}
+
+// QueryDetailed executes a read-only observation and retains PostgreSQL field metadata.
+func QueryDetailed(ctx context.Context, dsn, query string) (QueryResult, error) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("create read-only observer pool: %w", err)
+		return QueryResult{}, fmt.Errorf("create read-only observer pool: %w", err)
 	}
 	defer pool.Close()
 	transaction, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return nil, fmt.Errorf("begin read-only observation: %w", err)
+		return QueryResult{}, fmt.Errorf("begin read-only observation: %w", err)
 	}
 	defer func() { _ = transaction.Rollback(context.Background()) }()
 	rows, err := transaction.Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("execute read-only observation: %w", err)
+		return QueryResult{}, fmt.Errorf("execute read-only observation: %w", err)
 	}
 	defer rows.Close()
 	fields := rows.FieldDescriptions()
+	columns := make([]QueryColumn, len(fields))
+	for index, field := range fields {
+		columns[index] = QueryColumn{Name: string(field.Name), OID: uint32(field.DataTypeOID)}
+	}
 	result := make([]map[string]any, 0)
 	for rows.Next() {
 		values, err := rows.Values()
 		if err != nil {
-			return nil, fmt.Errorf("read observation row: %w", err)
+			return QueryResult{}, fmt.Errorf("read observation row: %w", err)
 		}
 		row := make(map[string]any, len(fields))
 		for index, field := range fields {
@@ -357,12 +385,12 @@ func Query(ctx context.Context, dsn, query string) ([]map[string]any, error) {
 		result = append(result, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate observation: %w", err)
+		return QueryResult{}, fmt.Errorf("iterate observation: %w", err)
 	}
 	if err := transaction.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit read-only observation: %w", err)
+		return QueryResult{}, fmt.Errorf("commit read-only observation: %w", err)
 	}
-	return result, nil
+	return QueryResult{Rows: result, Columns: columns}, nil
 }
 
 func CountProcessedEvent(ctx context.Context, dsn, eventID string) (int64, error) {

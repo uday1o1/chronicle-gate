@@ -1,0 +1,10 @@
+{
+  "invariantId": "fulfillment-sql",
+  "classification": "SEMANTIC_REGRESSION",
+  "observationId": "fulfillment-sql",
+  "rowKey": "",
+  "pointer": "/rows/0/fulfillment_mode",
+  "expected": "standard",
+  "actual": "expedited",
+  "digest": "e63414cbd4034d53a4f5d0b569981a70ec041c488b20a4a256adcad650c594e9"
+}

@@ -35,6 +35,11 @@ type InitializationEvidence struct {
 	Committed int64 `json:"committed"`
 }
 
+type OffsetBounds struct {
+	Start int64 `json:"start"`
+	End   int64 `json:"end"`
+}
+
 // Admin owns host-side Kafka clients for one run.
 type Admin struct {
 	client *kgo.Client
@@ -69,6 +74,24 @@ func (admin *Admin) DeleteTopic(ctx context.Context, topic string) error {
 		return fmt.Errorf("delete topic %q: %w", topic, response.Err)
 	}
 	return nil
+}
+
+// Bounds freezes the visible broker range for one topic partition.
+func (admin *Admin) Bounds(ctx context.Context, topic string, partition int32) (OffsetBounds, error) {
+	starts, err := admin.kadm.ListStartOffsets(ctx, topic)
+	if err != nil {
+		return OffsetBounds{}, fmt.Errorf("list start offsets for observation: %w", err)
+	}
+	ends, err := admin.kadm.ListEndOffsets(ctx, topic)
+	if err != nil {
+		return OffsetBounds{}, fmt.Errorf("list end offsets for observation: %w", err)
+	}
+	start, startOK := starts.Lookup(topic, partition)
+	end, endOK := ends.Lookup(topic, partition)
+	if !startOK || !endOK || start.Err != nil || end.Err != nil || start.Offset < 0 || end.Offset < start.Offset {
+		return OffsetBounds{}, fmt.Errorf("offset bounds for %s[%d] are unavailable", topic, partition)
+	}
+	return OffsetBounds{Start: start.Offset, End: end.Offset}, nil
 }
 
 func (admin *Admin) Publish(ctx context.Context, topic string, partition int32, key, value []byte, eventHash string) (RecordIdentity, error) {

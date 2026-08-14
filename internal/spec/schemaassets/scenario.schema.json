@@ -45,7 +45,18 @@
         "datacontenttype": {"const": "application/json"}, "data": {"type": "object"},
         "aggregateid": {"type": "string"}, "aggregateversion": {"type": "integer", "minimum": 0},
         "correlationid": {"type": "string"}, "causationid": {"type": "string"},
-        "schemaversion": {"type": "string"}, "dataschema": {"$ref": "#/$defs/localPath"}
+        "schemaversion": {"type": "string"}, "dataschema": {"$ref": "#/$defs/localPath"},
+        "registry": {"$ref": "#/$defs/registry"}
+      }
+    },
+    "registry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["subject", "schemaType", "compatibility", "history"],
+      "properties": {
+        "subject": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+        "schemaType": {"const": "JSON"},
+        "compatibility": {"enum": ["BACKWARD", "BACKWARD_TRANSITIVE", "FORWARD", "FORWARD_TRANSITIVE", "FULL", "FULL_TRANSITIVE"]},
+        "history": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/localPath"}}
       }
     },
     "checkpoint": {
@@ -103,13 +114,13 @@
       "type": "object", "additionalProperties": false, "required": ["id"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
-        "sql": {"type": "object", "additionalProperties": false, "required": ["queryFile", "orderBy"], "properties": {"queryFile": {"$ref": "#/$defs/localPath"}, "orderBy": {"type": "array", "minItems": 1, "items": {"type": "string"}}}},
-        "kafka": {"type": "object", "additionalProperties": false, "required": ["topic", "startOffset", "endOffset", "mode"], "properties": {"topic": {"type": "string"}, "startOffset": {"type": "integer", "minimum": 0}, "endOffset": {"type": "integer", "minimum": 0}, "mode": {"enum": ["ordered", "set", "multiset", "keyed"]}, "keyPointer": {"$ref": "#/$defs/jsonPointer"}}},
+        "sql": {"type": "object", "additionalProperties": false, "required": ["queryFile", "orderBy", "mode"], "properties": {"queryFile": {"$ref": "#/$defs/localPath"}, "orderBy": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "mode": {"enum": ["ordered", "set", "multiset", "keyed"]}, "keyPointer": {"$ref": "#/$defs/jsonPointer"}}},
+        "kafka": {"type": "object", "additionalProperties": false, "required": ["topic", "schemaFile", "partition", "startOffset", "endOffset", "mode"], "properties": {"topic": {"type": "string"}, "schemaFile": {"$ref": "#/$defs/localPath"}, "partition": {"type": "integer", "minimum": 0}, "startOffset": {"type": "integer", "minimum": 0}, "endOffset": {"type": "integer", "minimum": 0}, "mode": {"enum": ["ordered", "set", "multiset", "keyed"]}, "keyPointer": {"$ref": "#/$defs/jsonPointer"}, "nonsemanticHeaders": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}},
         "http": {"$ref": "#/$defs/httpObserver"}, "effects": {"$ref": "#/$defs/httpObserver"}
       },
       "oneOf": [{"required": ["sql"]}, {"required": ["kafka"]}, {"required": ["http"]}, {"required": ["effects"]}]
     },
-    "httpObserver": {"type": "object", "additionalProperties": false, "required": ["url"], "properties": {"url": {"type": "string", "pattern": "^http://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?/"}}},
+    "httpObserver": {"type": "object", "additionalProperties": false, "required": ["service", "port", "path", "mode"], "properties": {"service": {"type": "string", "minLength": 1}, "port": {"type": "integer", "minimum": 1, "maximum": 65535}, "path": {"type": "string", "pattern": "^/[^/].*$"}, "mode": {"enum": ["ordered", "set", "multiset", "keyed"]}, "keyPointer": {"$ref": "#/$defs/jsonPointer"}}},
     "invariant": {
       "type": "object", "additionalProperties": false, "required": ["id", "queryFile", "classification"],
       "properties": {"id": {"type": "string"}, "queryFile": {"$ref": "#/$defs/localPath"}, "classification": {"enum": ["SEMANTIC_REGRESSION", "SCHEMA_REGRESSION", "EXTERNAL_EFFECT_REGRESSION"]}}

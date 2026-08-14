@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["orderId", "fulfillmentMode", "status"],
+  "properties": {
+    "orderId": {"type": "string", "minLength": 1},
+    "fulfillmentMode": {"enum": ["standard", "expedited"]},
+    "status": {"const": "ready"}
+  }
+}

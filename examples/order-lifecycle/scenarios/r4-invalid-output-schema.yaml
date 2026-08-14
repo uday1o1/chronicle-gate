@@ -1,0 +1,72 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: Scenario
+metadata:
+  name: candidate-runtime-payload-must-match-schema
+  description: A candidate-only invalid runtime payload is a confirmed schema regression.
+spec:
+  seed: {}
+  clock:
+    start: "2026-08-13T00:00:00Z"
+  events:
+    fulfillment-requested:
+      specversion: "1.0"
+      id: fulfillment-requested-schema-control-1
+      source: /orders/order-schema-control-1
+      type: dev.chronicle.fulfillment.requested
+      subject: order-schema-control-1
+      time: "2026-08-13T00:00:03Z"
+      datacontenttype: application/json
+      aggregateid: order-schema-control-1
+      aggregateversion: 1
+      dataschema: schemas/fulfillment-requested-v2.schema.json
+      registry:
+        subject: fulfillment-requested-value
+        schemaType: JSON
+        compatibility: BACKWARD
+        history: [schemas/fulfillment-requested-v1.schema.json]
+      data:
+        loggingContext: invalid-output-schema
+        fulfillmentMode: standard
+        orderId: order-schema-control-1
+  steps:
+    - id: publish-fulfillment
+      publish:
+        event: fulfillment-requested
+        topic: fulfillment
+        partition: 0
+        key: order-schema-control-1
+    - id: observe-kafka
+      dependsOn: [publish-fulfillment]
+      timeout: 15s
+      observe:
+        observation: fulfillment-output
+  quiescence:
+    timeout: 30s
+    stabilityWindow: 2s
+    conditions:
+      - id: projector-lag
+        type: groupLagZero
+        group: fulfillment-projector
+      - id: terminal-ready
+        type: terminalState
+        service: fulfillment-projector
+        state: ready
+  observations:
+    - id: fulfillment-output
+      kafka:
+        topic: fulfillment-results
+        schemaFile: schemas/fulfillment-ready.schema.json
+        partition: 0
+        startOffset: 0
+        endOffset: 1
+        mode: keyed
+        keyPointer: /event/aggregateid
+  invariants: []
+  normalization: []
+  limits:
+    maxSteps: 100
+    maxEvents: 100
+    maxRunDuration: 6m
+    confirmationAttempts: 2
+    minimizationTrials: 100
+    minimizationDuration: 10m

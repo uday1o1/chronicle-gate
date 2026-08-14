@@ -22,6 +22,8 @@ import (
 	"github.com/uday1o1/chronicle-gate/internal/effects"
 	"github.com/uday1o1/chronicle-gate/internal/imagelock"
 	"github.com/uday1o1/chronicle-gate/internal/minimize"
+	"github.com/uday1o1/chronicle-gate/internal/observe"
+	"github.com/uday1o1/chronicle-gate/internal/registry"
 	creport "github.com/uday1o1/chronicle-gate/internal/report"
 	"github.com/uday1o1/chronicle-gate/internal/runlog"
 	cruntime "github.com/uday1o1/chronicle-gate/internal/runtime"
@@ -88,6 +90,8 @@ type EnvironmentEvidence struct {
 	NetworkName            string `json:"networkName,omitempty"`
 	HostBroker             string `json:"hostBroker,omitempty"`
 	InternalBroker         string `json:"internalBroker,omitempty"`
+	HostSchemaRegistry     string `json:"hostSchemaRegistry,omitempty"`
+	InternalSchemaRegistry string `json:"internalSchemaRegistry,omitempty"`
 	PostgresSchemaTemplate string `json:"postgresSchemaTemplate,omitempty"`
 }
 
@@ -111,6 +115,8 @@ type AttemptEvidence struct {
 	CommittedWhileBlocked  *int64                        `json:"committedWhileBlocked,omitempty"`
 	FinalCommitted         *int64                        `json:"finalCommitted,omitempty"`
 	Effects                *effects.Observation          `json:"effects,omitempty"`
+	Observations           []observe.Evidence            `json:"observations,omitempty"`
+	Registry               []registry.Evidence           `json:"registry,omitempty"`
 	Quiescence             *QuiescenceEvidence           `json:"quiescence,omitempty"`
 	SchemaAfterHealth      string                        `json:"schemaAfterHealth,omitempty"`
 	SchemaAfterObservation string                        `json:"schemaAfterObservation,omitempty"`
@@ -161,6 +167,11 @@ type infrastructureFailure struct {
 	err error
 }
 
+type unresolvedFailure struct{ err error }
+
+func (failure *unresolvedFailure) Error() string { return failure.err.Error() }
+func (failure *unresolvedFailure) Unwrap() error { return failure.err }
+
 func (failure *infrastructureFailure) Error() string {
 	return failure.err.Error()
 }
@@ -172,6 +183,10 @@ func (failure *infrastructureFailure) Unwrap() error {
 func ValidateVerticalSlice(scenario spec.Scenario, target spec.Target) error {
 	if isPreciseScenario(scenario) {
 		_, err := buildPrecisePlan(scenario, target)
+		return err
+	}
+	if isGeneralObserverScenario(scenario) {
+		_, err := buildGeneralPlan(scenario, target)
 		return err
 	}
 	_, err := buildVerticalPlan(scenario, target)
@@ -289,10 +304,14 @@ func Run(ctx context.Context, config Config) (report Report) {
 		return report
 	}
 	precise := isPreciseScenario(config.Scenario)
+	general := isGeneralObserverScenario(config.Scenario)
 	var plan verticalPlan
 	var baselinePrecisePlan precisePlan
+	var baselineGeneralPlan generalPlan
 	if precise {
 		baselinePrecisePlan, err = buildPrecisePlan(config.Scenario, config.Baseline)
+	} else if general {
+		baselineGeneralPlan, err = buildGeneralPlan(config.Scenario, config.Baseline)
 	} else {
 		plan, err = buildVerticalPlan(config.Scenario, config.Baseline)
 	}
@@ -323,6 +342,8 @@ func Run(ctx context.Context, config Config) (report Report) {
 		NetworkName:            environment.NetworkName,
 		HostBroker:             environment.HostBroker,
 		InternalBroker:         environment.InternalBroker,
+		HostSchemaRegistry:     environment.HostSchemaRegistry,
+		InternalSchemaRegistry: environment.InternalSchemaRegistry,
 		PostgresSchemaTemplate: "chronicle_template",
 	}
 	secretValues := []string{environment.PostgresAdminPassword, environment.HostPostgresDSN}
@@ -355,6 +376,11 @@ func Run(ctx context.Context, config Config) (report Report) {
 				RunID: report.RunID, Index: 0, Role: "baseline", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
 				Plan: baselinePrecisePlan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
 			})
+		} else if general {
+			baseline, err = executeGeneralAttempt(runContext, generalAttemptConfig{
+				RunID: report.RunID, Index: 0, Role: "baseline", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+				Plan: baselineGeneralPlan, Target: config.Baseline, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
+			})
 		} else {
 			baseline, err = executeAttempt(runContext, attemptConfig{
 				RunID: report.RunID, Index: 0, Role: "baseline", ScenarioRoot: config.ScenarioRoot, Output: config.Output,
@@ -366,6 +392,8 @@ func Run(ctx context.Context, config Config) (report Report) {
 			invariantID := plan.invariant.ID
 			if precise {
 				invariantID = baselinePrecisePlan.invariant.ID
+			} else if general && len(baselineGeneralPlan.invariants) != 0 {
+				invariantID = baselineGeneralPlan.invariants[0].ID
 			}
 			report.fail("UNRESOLVED", fmt.Errorf("baseline violated invariant %q", invariantID))
 			err = errors.New(report.Error)
@@ -384,9 +412,12 @@ func Run(ctx context.Context, config Config) (report Report) {
 	if err == nil {
 		var candidatePlan verticalPlan
 		var candidatePrecisePlan precisePlan
+		var candidateGeneralPlan generalPlan
 		var planErr error
 		if precise {
 			candidatePrecisePlan, planErr = buildPrecisePlan(config.Scenario, config.Candidate)
+		} else if general {
+			candidateGeneralPlan, planErr = buildGeneralPlan(config.Scenario, config.Candidate)
 		} else {
 			candidatePlan, planErr = buildVerticalPlan(config.Scenario, config.Candidate)
 		}
@@ -401,6 +432,12 @@ func Run(ctx context.Context, config Config) (report Report) {
 					attempt, attemptErr = executePreciseAttempt(runContext, preciseAttemptConfig{
 						RunID: report.RunID, Index: index, Role: "candidate", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
 						Plan: candidatePrecisePlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal, SecretValues: secretValues,
+					})
+				} else if general {
+					attempt, attemptErr = executeGeneralAttempt(runContext, generalAttemptConfig{
+						RunID: report.RunID, Index: index, Role: "candidate", Scenario: config.Scenario, ScenarioRoot: config.ScenarioRoot, Output: config.Output,
+						Plan: candidateGeneralPlan, Target: config.Candidate, Environment: environment, Database: databaseManager, Broker: admin, Journal: journal,
+						SecretValues: secretValues, Baseline: report.Baseline,
 					})
 				} else {
 					attempt, attemptErr = executeAttempt(runContext, attemptConfig{
@@ -432,7 +469,7 @@ func Run(ctx context.Context, config Config) (report Report) {
 	if err != nil && report.Error == "" {
 		report.fail(classifyOperationalError(err), err)
 	}
-	if err == nil && report.Classification == "SEMANTIC_REGRESSION" && !config.NoMinimize && !precise {
+	if err == nil && report.Classification == "SEMANTIC_REGRESSION" && !config.NoMinimize && !precise && !general {
 		if transitionErr := transition(journal, &report, "MINIMIZING"); transitionErr != nil {
 			report.fail("INFRASTRUCTURE_ERROR", transitionErr)
 		} else {
@@ -805,6 +842,10 @@ func classifyCandidate(attempts []AttemptEvidence) (string, *FailureSignature) {
 }
 
 func classifyOperationalError(err error) string {
+	var unresolved *unresolvedFailure
+	if errors.As(err, &unresolved) {
+		return "UNRESOLVED"
+	}
 	var infrastructure *infrastructureFailure
 	if errors.As(err, &infrastructure) {
 		return "INFRASTRUCTURE_ERROR"

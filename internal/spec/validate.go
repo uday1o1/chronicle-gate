@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/uday1o1/chronicle-gate/internal/imagelock"
@@ -192,7 +193,21 @@ func ValidateScenarioAndTargetWithOptions(scenario Scenario, target Target, root
 	for _, service := range target.Spec.Services {
 		services[service.Name] = service
 	}
-	observations := validateCorrectnessContract(scenario.Spec.Events, scenario.Spec.Observations, scenario.Spec.Invariants, scenario.Spec.Normalization, scenario.Spec.Quiescence, root, &validator)
+	observations := validateCorrectnessContract(scenario.Spec.Events, scenario.Spec.Steps, scenario.Spec.Observations, scenario.Spec.Invariants, scenario.Spec.Normalization, scenario.Spec.Quiescence, root, &validator)
+	for index, observation := range scenario.Spec.Observations {
+		serviceName := ""
+		if observation.HTTP != nil {
+			serviceName = observation.HTTP.Service
+		}
+		if observation.Effects != nil {
+			serviceName = observation.Effects.Service
+		}
+		if serviceName != "" {
+			if _, exists := services[serviceName]; !exists {
+				validator.add(fmt.Sprintf("/spec/observations/%d", index), "declared_service", fmt.Sprintf("observer service %q is undeclared", serviceName))
+			}
+		}
+	}
 	validateLimits(scenario.Spec.Limits, &validator)
 	conditions := make(map[string]struct{}, len(scenario.Spec.Quiescence.Conditions))
 	for index, condition := range scenario.Spec.Quiescence.Conditions {
@@ -507,7 +522,7 @@ func validateLimits(limits Limits, validator *validation) {
 	}
 }
 
-func validateCorrectnessContract(events map[string]CloudEvent, observationList []Observation, invariants []Invariant, normalizations []Normalization, quiescence Quiescence, root string, validator *validation) map[string]struct{} {
+func validateCorrectnessContract(events map[string]CloudEvent, steps []Step, observationList []Observation, invariants []Invariant, normalizations []Normalization, quiescence Quiescence, root string, validator *validation) map[string]struct{} {
 	for name, event := range events {
 		if event.SpecVersion != "1.0" || event.ID == "" || event.Source == "" || event.Type == "" || event.Subject == "" || event.Time == "" || event.DataContentType != "application/json" || event.Data == nil {
 			validator.add("/spec/events/"+escapePointer(name), "cloudevent_required", "CloudEvent requires specversion 1.0, id, source, type, subject, time, application/json content type, and data")
@@ -518,6 +533,32 @@ func validateCorrectnessContract(events map[string]CloudEvent, observationList [
 		if event.DataSchema != "" {
 			if err := validatePayloadSchema(root, event.DataSchema, event.Data); err != nil {
 				validator.add("/spec/events/"+escapePointer(name)+"/dataschema", "payload_schema", err.Error())
+			}
+		}
+		if event.Registry != nil {
+			pointer := "/spec/events/" + escapePointer(name) + "/registry"
+			if event.DataSchema == "" {
+				validator.add(pointer, "registry_schema", "Registry declarations require dataschema")
+			}
+			if event.Registry.Subject == "" || strings.ContainsAny(event.Registry.Subject, "/\\") {
+				validator.add(pointer+"/subject", "registry_subject", "Registry subject must be a logical name without path separators")
+			}
+			if event.Registry.SchemaType != "JSON" {
+				validator.add(pointer+"/schemaType", "registry_schema_type", "V1 Registry declarations require JSON schemaType")
+			}
+			switch event.Registry.Compatibility {
+			case "BACKWARD", "BACKWARD_TRANSITIVE", "FORWARD", "FORWARD_TRANSITIVE", "FULL", "FULL_TRANSITIVE":
+			default:
+				validator.add(pointer+"/compatibility", "registry_compatibility", "Registry compatibility must prove a non-NONE compatibility mode")
+			}
+			if len(event.Registry.History) == 0 {
+				validator.add(pointer+"/history", "registry_history", "Registry compatibility requires at least one predecessor schema")
+			}
+			for index, path := range event.Registry.History {
+				validateLocalFile(root, path, fmt.Sprintf("%s/history/%d", pointer, index), "registry_history", validator)
+				if err := validatePayloadSchema(root, path, map[string]any{}); err != nil && !strings.Contains(err.Error(), "failed local payload schema") {
+					validator.add(fmt.Sprintf("%s/history/%d", pointer, index), "registry_history", err.Error())
+				}
 			}
 		}
 	}
@@ -537,14 +578,46 @@ func validateCorrectnessContract(events map[string]CloudEvent, observationList [
 			if len(observation.SQL.OrderBy) == 0 {
 				validator.add(pointer+"/sql/orderBy", "stable_sql_order", "SQL snapshots require explicit stable ordering keys")
 			}
+			validateObservationMode(pointer+"/sql", observation.SQL.Mode, observation.SQL.KeyPointer, validator)
 		}
 		if observation.Kafka != nil {
+			validateLocalFile(root, observation.Kafka.SchemaFile, pointer+"/kafka/schemaFile", "kafka_payload_schema", validator)
 			if observation.Kafka.EndOffset < observation.Kafka.StartOffset {
 				validator.add(pointer+"/kafka/endOffset", "bounded_kafka_range", "Kafka endOffset must not precede startOffset")
 			}
 			if observation.Kafka.Mode == "keyed" && observation.Kafka.KeyPointer == "" {
 				validator.add(pointer+"/kafka/keyPointer", "keyed_comparison", "keyed Kafka comparison requires an exact keyPointer")
 			}
+			validateObservationMode(pointer+"/kafka", observation.Kafka.Mode, observation.Kafka.KeyPointer, validator)
+			seenHeaders := map[string]struct{}{}
+			for headerIndex, header := range observation.Kafka.NonsemanticHeaders {
+				if header == "" || !utf8.ValidString(header) {
+					validator.add(fmt.Sprintf("%s/kafka/nonsemanticHeaders/%d", pointer, headerIndex), "header_name", "nonsemantic header names must be nonempty UTF-8")
+				}
+				if _, exists := seenHeaders[header]; exists {
+					validator.add(fmt.Sprintf("%s/kafka/nonsemanticHeaders/%d", pointer, headerIndex), "header_name", "nonsemantic header names must be unique")
+				}
+				seenHeaders[header] = struct{}{}
+			}
+		}
+		if observation.HTTP != nil {
+			validateLocalObserver(pointer+"/http", observation.HTTP.Service, observation.HTTP.Port, observation.HTTP.Path, observation.HTTP.Mode, observation.HTTP.KeyPointer, validator)
+		}
+		if observation.Effects != nil {
+			validateLocalObserver(pointer+"/effects", observation.Effects.Service, observation.Effects.Port, observation.Effects.Path, observation.Effects.Mode, observation.Effects.KeyPointer, validator)
+		}
+	}
+	usedObservations := map[string]int{}
+	observeStepCount := 0
+	for _, step := range steps {
+		if step.Observe != nil {
+			usedObservations[step.Observe.Observation]++
+			observeStepCount++
+		}
+	}
+	for id := range observations {
+		if observeStepCount > 0 && usedObservations[id] == 0 {
+			validator.add("/spec/observations", "observation_inventory", fmt.Sprintf("observation %q is never executed by an observe step", id))
 		}
 	}
 
@@ -611,6 +684,27 @@ func validateCorrectnessContract(events map[string]CloudEvent, observationList [
 		conditionIDs[condition.ID] = struct{}{}
 	}
 	return observations
+}
+
+func validateObservationMode(pointer, mode, keyPointer string, validator *validation) {
+	switch mode {
+	case "ordered", "set", "multiset", "keyed":
+	default:
+		validator.add(pointer+"/mode", "comparison_mode", "comparison mode must be ordered, set, multiset, or keyed")
+	}
+	if mode == "keyed" && keyPointer == "" {
+		validator.add(pointer+"/keyPointer", "keyed_comparison", "keyed comparison requires keyPointer")
+	}
+	if mode != "keyed" && keyPointer != "" {
+		validator.add(pointer+"/keyPointer", "comparison_mode", "keyPointer is only valid for keyed comparison")
+	}
+}
+
+func validateLocalObserver(pointer, service string, port int, path, mode, keyPointer string, validator *validation) {
+	if service == "" || port < 1 || port > 65535 || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		validator.add(pointer, "local_observer", "local observers require service, valid port, and a single-slash absolute path")
+	}
+	validateObservationMode(pointer, mode, keyPointer, validator)
 }
 
 func validJSONPointer(pointer string) bool {
@@ -725,6 +819,11 @@ func validatePayloadSchema(root, relative string, data map[string]any) error {
 		return fmt.Errorf("event data failed local payload schema: %w", err)
 	}
 	return nil
+}
+
+// ValidatePayload validates one runtime payload through the same root-confined loader used at preflight.
+func ValidatePayload(root, relative string, data map[string]any) error {
+	return validatePayloadSchema(root, relative, data)
 }
 
 func collectSchemaDocuments(root, path string, documents map[string]any) error {
@@ -921,7 +1020,7 @@ func ValidateWorkload(workload Workload, root string) []Violation {
 	if workload.Kind != "Workload" {
 		validator.add("/kind", "kind", "kind must be Workload")
 	}
-	validateCorrectnessContract(workload.Spec.Events, workload.Spec.Observations, workload.Spec.Invariants, workload.Spec.Normalization, workload.Spec.Quiescence, root, &validator)
+	validateCorrectnessContract(workload.Spec.Events, nil, workload.Spec.Observations, workload.Spec.Invariants, workload.Spec.Normalization, workload.Spec.Quiescence, root, &validator)
 	return sortedViolations(validator.violations)
 }
 

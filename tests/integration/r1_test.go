@@ -183,6 +183,9 @@ func TestR2PublicCLIAndOfflineBundleReplay(t *testing.T) {
 	}
 	for _, attempt := range append([]engine.AttemptEvidence{*report.Baseline}, report.Candidate...) {
 		assertPreciseAttempt(t, attempt, 2)
+		if len(attempt.Observations) != 1 || attempt.Observations[0].Type != "effects" || attempt.Observations[0].Identity.StepID != "observe-effects" || attempt.Observations[0].Identity.ObserverID != "capture-effects" || attempt.Observations[0].Identity.Occurrence != 1 || attempt.Observations[0].SHA256 == "" {
+			t.Fatalf("R2 canonical effect observation is incomplete: %#v", attempt.Observations)
+		}
 	}
 	for _, attempt := range report.Candidate {
 		if attempt.Effects == nil || len(attempt.Effects.Entries) != 2 || attempt.Signature == nil || attempt.Signature.Digest != expected.Digest {
@@ -215,6 +218,132 @@ func TestR2PublicCLIAndOfflineBundleReplay(t *testing.T) {
 	assertAuthoritativeJournal(t, replayOutput, "COMPLETE")
 	assertResultContract(t, output)
 	assertResultContract(t, replayOutput)
+}
+
+func TestR4ObserversRegistryControlAndOfflineReplay(t *testing.T) {
+	repository, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.MkdirTemp(filepath.Join(repository, "run"), "integration-r4-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	baselinePath := filepath.Join(repository, "examples/order-lifecycle/targets/generated/r4-baseline.yaml")
+	candidatePath := filepath.Join(repository, "examples/order-lifecycle/targets/generated/r4-candidate.yaml")
+	output := filepath.Join(root, "regression")
+	report, stdout, stderr, exitCode := runCLIWithScenario(t, repository, output,
+		filepath.Join(repository, "examples/order-lifecycle/scenarios/r4-schema-default-drift.yaml"), baselinePath, candidatePath, true,
+	)
+	if exitCode != 2 || report.Classification != "SEMANTIC_REGRESSION" || report.FailureSignature == nil {
+		t.Fatalf("R4 exit=%d report=%#v\nstdout=%s\nstderr=%s", exitCode, report, stdout, stderr)
+	}
+	expectedDocument, err := os.ReadFile(filepath.Join(repository, "examples/order-lifecycle/expected/r4-signature.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var expected engine.FailureSignature
+	if err := json.Unmarshal(expectedDocument, &expected); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(*report.FailureSignature, expected) || report.Confirmations != 2 {
+		t.Fatalf("R4 signature or confirmations changed: signature=%#v confirmations=%d", report.FailureSignature, report.Confirmations)
+	}
+	for _, attempt := range append([]engine.AttemptEvidence{*report.Baseline}, report.Candidate...) {
+		assertR4Attempt(t, attempt)
+	}
+
+	controlOutput := filepath.Join(root, "control")
+	control, controlStdout, controlStderr, controlExit := runCLIWithScenario(t, repository, controlOutput,
+		filepath.Join(repository, "examples/order-lifecycle/scenarios/r4-explicit-default-control.yaml"), baselinePath, candidatePath, true,
+	)
+	if controlExit != 0 || control.Classification != "PASS" || control.FailureSignature != nil {
+		t.Fatalf("R4 control exit=%d report=%#v\nstdout=%s\nstderr=%s", controlExit, control, controlStdout, controlStderr)
+	}
+	for _, attempt := range append([]engine.AttemptEvidence{*control.Baseline}, control.Candidate...) {
+		assertR4Attempt(t, attempt)
+	}
+
+	schemaOutput := filepath.Join(root, "schema-regression")
+	schemaReport, schemaStdout, schemaStderr, schemaExit := runCLIWithScenario(t, repository, schemaOutput,
+		filepath.Join(repository, "examples/order-lifecycle/scenarios/r4-invalid-output-schema.yaml"), baselinePath, candidatePath, true,
+	)
+	if schemaExit != 2 || schemaReport.Classification != "SCHEMA_REGRESSION" || schemaReport.FailureSignature == nil || schemaReport.Confirmations != 2 {
+		t.Fatalf("R4 schema exit=%d report=%#v\nstdout=%s\nstderr=%s", schemaExit, schemaReport, schemaStdout, schemaStderr)
+	}
+	schemaSignature := schemaReport.FailureSignature
+	if schemaSignature.ObservationID != "fulfillment-output" || schemaSignature.Pointer != "/0/event/data" || schemaSignature.RowKey != "schemas/fulfillment-ready.schema.json" || schemaSignature.Expected != true || schemaSignature.Actual != false {
+		t.Fatalf("R4 schema signature is incomplete: %#v", schemaSignature)
+	}
+	if schemaReport.Baseline == nil || len(schemaReport.Baseline.Observations) != 1 || !schemaReport.Baseline.Observations[0].RawSchemaValid {
+		t.Fatalf("R4 schema baseline evidence is incomplete: %#v", schemaReport.Baseline)
+	}
+	for _, attempt := range schemaReport.Candidate {
+		if attempt.Status != "COMPLETE" || len(attempt.Observations) != 1 || attempt.Observations[0].RawSchemaValid || attempt.Signature == nil || attempt.Signature.Digest != schemaSignature.Digest {
+			t.Fatalf("R4 candidate schema evidence is incomplete: %#v", attempt)
+		}
+	}
+	invalidBaselineOutput := filepath.Join(root, "invalid-baseline")
+	invalidBaseline, invalidStdout, invalidStderr, invalidExit := runCLIWithScenario(t, repository, invalidBaselineOutput,
+		filepath.Join(repository, "examples/order-lifecycle/scenarios/r4-invalid-output-schema.yaml"), candidatePath, candidatePath, true,
+	)
+	if invalidExit != 5 || invalidBaseline.Classification != "UNRESOLVED" || invalidBaseline.FailureSignature != nil || len(invalidBaseline.Candidate) != 0 {
+		t.Fatalf("invalid baseline exit=%d report=%#v\nstdout=%s\nstderr=%s", invalidExit, invalidBaseline, invalidStdout, invalidStderr)
+	}
+
+	bundlePath := filepath.Join(output, "reproduction.zip")
+	archive, err := bundle.Open(bundlePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleHash := archive.SHA256
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	removeTargetImages(t, baselinePath, candidatePath)
+	replayOutput := filepath.Join(root, "replay")
+	replayed, replayStdout, replayStderr, replayExit := replayCLI(t, repository, bundlePath, replayOutput)
+	if replayExit != 2 || replayed.Classification != "SEMANTIC_REGRESSION" || replayed.FailureSignature == nil || !reflect.DeepEqual(*replayed.FailureSignature, expected) {
+		t.Fatalf("R4 replay exit=%d report=%#v\nstdout=%s\nstderr=%s", replayExit, replayed, replayStdout, replayStderr)
+	}
+	if replayed.Replay == nil || replayed.Replay.SourceBundleSHA256 != bundleHash || replayed.Replay.ExpectedSignature != expected.Digest {
+		t.Fatalf("R4 replay provenance is incomplete: %#v", replayed.Replay)
+	}
+	for _, run := range []engine.Report{report, control, schemaReport, invalidBaseline, replayed} {
+		assertNoRunResources(t, run.RunID)
+	}
+	for _, directory := range []string{output, controlOutput, schemaOutput, invalidBaselineOutput, replayOutput} {
+		assertPrivateArtifacts(t, directory)
+		assertResultContract(t, directory)
+	}
+	for _, directory := range []string{output, controlOutput, schemaOutput, replayOutput} {
+		assertAuthoritativeJournal(t, directory, "COMPLETE")
+	}
+	assertAuthoritativeJournal(t, invalidBaselineOutput, "UNRESOLVED")
+	assertNormalizationReportFormats(t, repository, output, 12)
+}
+
+func assertR4Attempt(t *testing.T, attempt engine.AttemptEvidence) {
+	t.Helper()
+	if attempt.Status != "COMPLETE" || len(attempt.Observations) != 3 || len(attempt.Registry) != 1 {
+		t.Fatalf("R4 attempt evidence is incomplete: %#v", attempt)
+	}
+	wantIdentity := [][3]any{
+		{"observe-sql", "fulfillment-sql", 1},
+		{"observe-kafka", "fulfillment-output", 1},
+		{"observe-http", "fulfillment-http", 1},
+	}
+	for index, observation := range attempt.Observations {
+		want := wantIdentity[index]
+		if observation.Identity.StepID != want[0] || observation.Identity.ObserverID != want[1] || observation.Identity.Occurrence != want[2] || observation.SHA256 == "" || len(observation.Applied) != 1 || observation.Applied[0].AffectedCount != 1 {
+			t.Fatalf("R4 observation %d is incomplete: %#v", index, observation)
+		}
+	}
+	registered := attempt.Registry[0]
+	if registered.LogicalSubject != "fulfillment-requested-value" || registered.EffectiveMode != "BACKWARD" || len(registered.Versions) != 2 || len(registered.Versions[1].PredecessorVersions) != 1 || len(registered.Versions[1].CompatibilityChecks) != 1 || !registered.Versions[1].CompatibilityChecks[0] {
+		t.Fatalf("R4 Registry evidence is incomplete: %#v", registered)
+	}
 }
 
 func TestManualSynchronousCommitControl(t *testing.T) {
@@ -395,7 +524,7 @@ func runCLIWithScenario(t *testing.T, repository, output, scenario, baseline, ca
 func replayCLI(t *testing.T, repository, bundlePath, output string) (engine.Report, string, string, int) {
 	t.Helper()
 	command := exec.Command(filepath.Join(repository, "bin/chronicle"), "replay", "--bundle", bundlePath, "--out", output, "--json")
-	command.Dir = repository
+	command.Dir = filepath.Dir(output)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -498,6 +627,30 @@ func assertPublicReportFormats(t *testing.T, repository, root string) {
 		}
 		if len(output) == 0 {
 			t.Fatalf("render %s report returned no output", format)
+		}
+	}
+}
+
+func assertNormalizationReportFormats(t *testing.T, repository, root string, want int) {
+	t.Helper()
+	for _, format := range []string{"text", "json", "junit", "html"} {
+		output, err := exec.Command(filepath.Join(repository, "bin/chronicle"), "report", "--result", root, "--format", format).CombinedOutput()
+		if err != nil {
+			t.Fatalf("render %s normalization report: %v: %s", format, err, output)
+		}
+		if !bytes.Contains(output, []byte("sql-updated-at")) || !bytes.Contains(output, []byte("fulfillment-sql")) {
+			t.Fatalf("%s report omits applied normalization evidence: %s", format, output)
+		}
+		if format == "json" {
+			var rendered struct {
+				Normalizations []json.RawMessage `json:"normalizations"`
+			}
+			if err := json.Unmarshal(output, &rendered); err != nil {
+				t.Fatal(err)
+			}
+			if len(rendered.Normalizations) != want {
+				t.Fatalf("json normalization summaries = %d, want %d", len(rendered.Normalizations), want)
+			}
 		}
 	}
 }
