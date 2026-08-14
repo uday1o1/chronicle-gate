@@ -445,7 +445,7 @@ func executeControlledAttempt(ctx context.Context, config controlledAttemptConfi
 	if err != nil {
 		return evidence, err
 	}
-	capabilities, err := client.Capabilities(ctx)
+	capabilities, err := waitProbeCapabilities(ctx, client, 5*time.Second)
 	if err != nil {
 		return evidence, err
 	}

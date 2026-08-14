@@ -1,12 +1,51 @@
 package engine
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/uday1o1/chronicle-gate/internal/probeclient"
 	"github.com/uday1o1/chronicle-gate/internal/spec"
+	"github.com/uday1o1/chronicle-gate/pkg/probe"
 )
+
+func TestControlledCapabilityHandshakeRetriesStartupRefusal(t *testing.T) {
+	t.Parallel()
+	const token = "0123456789abcdef0123456789abcdef"
+	serviceProbe := probe.New(
+		probe.WithEnabled(true),
+		probe.WithToken(token),
+		probe.WithCapabilities(probe.Capabilities{Service: "order-workflow", CommitMode: "manual_sync"}),
+	)
+	var attempts atomic.Int32
+	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if attempts.Add(1) < 3 {
+			http.Error(writer, "starting", http.StatusServiceUnavailable)
+			return
+		}
+		serviceProbe.Handler().ServeHTTP(writer, request)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client, err := probeclient.New(server.URL, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	capabilities, err := waitProbeCapabilities(context.Background(), client, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if capabilities.Service != "order-workflow" || attempts.Load() < 3 {
+		t.Fatalf("capability retry evidence = %#v after %d attempts", capabilities, attempts.Load())
+	}
+}
 
 func TestControlledPlansAcceptTheM6Corpus(t *testing.T) {
 	t.Parallel()

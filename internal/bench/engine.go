@@ -319,11 +319,21 @@ type sampleOutcome struct {
 func sampleResources(ctx context.Context, service *benchmarkService, workload spec.BenchmarkWorkload, round int, role string, started time.Time, output chan<- sampleOutcome) {
 	deadline := started.Add(workload.Spec.Schedule.Measurement.Duration)
 	values := []resourceSample{}
-	for {
+	for _, offset := range resourceSampleOffsets(workload.Spec.Schedule.Measurement.Duration, workload.Spec.ResourceSampleInterval.Duration) {
+		scheduled := started.Add(offset)
+		if wait := time.Until(scheduled); wait > 0 {
+			timer := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				output <- sampleOutcome{values: values, err: ctx.Err()}
+				return
+			case <-timer.C:
+			}
+		}
 		now := time.Now()
-		if now.After(deadline) {
-			output <- sampleOutcome{values: values}
-			return
+		if !now.Before(deadline) {
+			break
 		}
 		sample, err := service.sample(ctx, round, role, now.Sub(started))
 		if err != nil {
@@ -331,20 +341,17 @@ func sampleResources(ctx context.Context, service *benchmarkService, workload sp
 			return
 		}
 		values = append(values, sample)
-		wait := workload.Spec.ResourceSampleInterval.Duration
-		if remaining := time.Until(deadline); remaining < wait {
-			wait = remaining
-		}
-		if wait <= 0 {
-			continue
-		}
-		timer := time.NewTimer(wait)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			output <- sampleOutcome{values: values, err: ctx.Err()}
-			return
-		case <-timer.C:
-		}
 	}
+	output <- sampleOutcome{values: values}
+}
+
+func resourceSampleOffsets(measurement, interval time.Duration) []time.Duration {
+	if measurement <= 0 || interval <= 0 {
+		return nil
+	}
+	offsets := make([]time.Duration, 0, int(measurement/interval)+1)
+	for offset := time.Duration(0); offset < measurement; offset += interval {
+		offsets = append(offsets, offset)
+	}
+	return offsets
 }

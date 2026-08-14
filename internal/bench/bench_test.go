@@ -154,6 +154,17 @@ func TestOutputBudgetCountsEveryRegularArtifact(t *testing.T) {
 	}
 }
 
+func TestResourceSampleScheduleUsesAbsoluteIntervals(t *testing.T) {
+	offsets := resourceSampleOffsets(2*time.Second, 250*time.Millisecond)
+	want := []time.Duration{0, 250 * time.Millisecond, 500 * time.Millisecond, 750 * time.Millisecond, time.Second, 1250 * time.Millisecond, 1500 * time.Millisecond, 1750 * time.Millisecond}
+	if !reflect.DeepEqual(offsets, want) {
+		t.Fatalf("resource sample offsets = %v, want %v", offsets, want)
+	}
+	if offsets := resourceSampleOffsets(time.Second, 0); offsets != nil {
+		t.Fatalf("invalid resource sample interval produced %v", offsets)
+	}
+}
+
 func TestBoundedCommandBufferFailsClosed(t *testing.T) {
 	buffer := newBoundedCommandBuffer(3)
 	if _, err := buffer.Write([]byte("abcd")); err == nil || string(buffer.Bytes()) != "abc" {
