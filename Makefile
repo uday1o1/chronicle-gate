@@ -22,6 +22,7 @@ REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE := chronicle-gate/outbox-relay:candidate-
 REFERENCE_LIFECYCLE_WORKFLOW_IMAGE := chronicle-gate/lifecycle-workflow:baseline-m7
 BENCHMARK_BASELINE_IMAGE := chronicle-gate/benchmark-api:baseline-m9
 BENCHMARK_CANDIDATE_IMAGE := chronicle-gate/benchmark-api:candidate-slow-m9
+REFERENCE_BUILD_CACHE_LABEL := dev.chronicle.build-cache=reference-v1
 GO_CACHE_MOUNTS := -v chronicle-gate-go-mod-cache:/go/pkg/mod -v chronicle-gate-go-build-cache:/root/.cache/go-build
 
 HOST_GOOS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -95,11 +96,13 @@ reference-images:
 	docker build --pull=false --build-arg RELAY_VARIANT=candidate-r7 --label dev.chronicle.reference=outbox-relay-candidate-r7 -t $(REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/outbox-relay/Dockerfile .
 	docker build --pull=false --label dev.chronicle.reference=lifecycle-workflow -t $(REFERENCE_LIFECYCLE_WORKFLOW_IMAGE) -f examples/order-lifecycle/services/lifecycle-workflow/Dockerfile .
 	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))" --flaky-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_FLAKY_IMAGE))" --r4-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_BASELINE_IMAGE))" --r4-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_CANDIDATE_IMAGE))" --r4-metadata-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_METADATA_IMAGE))" --workflow-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_BASELINE_IMAGE))" --workflow-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE))" --effect-sink-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_EFFECT_SINK_IMAGE))" --state-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_BASELINE_IMAGE))" --state-r3-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R3_IMAGE))" --state-r5-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R5_IMAGE))" --state-r6-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R6_IMAGE))" --order-api-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_ORDER_API_IMAGE))" --outbox-relay-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_OUTBOX_RELAY_BASELINE_IMAGE))" --outbox-relay-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE))" --lifecycle-workflow-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_LIFECYCLE_WORKFLOW_IMAGE))"
+	docker image prune --force --filter "label=$(REFERENCE_BUILD_CACHE_LABEL)"
 
 benchmark-images:
 	docker build --pull=false --build-arg BENCHMARK_DELAY=1ms --label dev.chronicle.reference=benchmark-baseline -t $(BENCHMARK_BASELINE_IMAGE) -f examples/order-lifecycle/services/benchmark-api/Dockerfile .
 	docker build --pull=false --build-arg BENCHMARK_DELAY=20ms --label dev.chronicle.reference=benchmark-candidate-slow -t $(BENCHMARK_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/benchmark-api/Dockerfile .
 	$(GO_CMD) run ./tools/generate_benchmark_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(BENCHMARK_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(BENCHMARK_CANDIDATE_IMAGE))"
+	docker image prune --force --filter "label=$(REFERENCE_BUILD_CACHE_LABEL)"
 
 test-integration: reference-images build
 	@mkdir -p dist run
