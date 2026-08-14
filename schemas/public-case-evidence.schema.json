@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/public-case-evidence.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "caseId", "claimId", "role", "capturedAt", "source", "outcome", "reduction", "artifacts", "boundary"],
+  "properties": {
+    "schemaVersion": {"const": "chronicle.dev/public-case-evidence/v1alpha1"},
+    "kind": {"const": "PublicCaseEvidence"},
+    "caseId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"},
+    "claimId": {"type": "string", "pattern": "^R[1-7](-control)?$"},
+    "role": {"enum": ["regression", "control"]},
+    "capturedAt": {"type": "string", "format": "date-time"},
+    "source": {"$ref": "evidence-capture.schema.json#/$defs/source"},
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exitCode", "state", "classification", "failureSignature", "confirmations", "baselineAttempts", "candidateAttempts", "observations"],
+      "properties": {
+        "exitCode": {"enum": [0, 2]},
+        "state": {"const": "COMPLETE"},
+        "classification": {"enum": ["PASS", "SEMANTIC_REGRESSION", "SCHEMA_REGRESSION", "EXTERNAL_EFFECT_REGRESSION"]},
+        "failureSignature": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+        "confirmations": {"type": "integer", "minimum": 0, "maximum": 2},
+        "baselineAttempts": {"const": 1},
+        "candidateAttempts": {"type": "integer", "minimum": 1, "maximum": 256},
+        "observations": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "observerId", "type", "count", "rawSchemaValid"],
+            "properties": {
+              "role": {"type": "string", "pattern": "^(baseline|candidate-[1-9][0-9]*)$"},
+              "observerId": {"type": "string", "minLength": 1, "maxLength": 128},
+              "type": {"type": "string", "minLength": 1, "maxLength": 32},
+              "count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+              "rawSchemaValid": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "reduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "minimality", "originalEvents", "finalEvents", "originalActions", "finalActions", "trials"],
+      "properties": {
+        "status": {"type": "string", "maxLength": 32},
+        "minimality": {"type": "string", "maxLength": 32},
+        "originalEvents": {"type": "integer", "minimum": 0},
+        "finalEvents": {"type": "integer", "minimum": 0},
+        "originalActions": {"type": "integer", "minimum": 0},
+        "finalActions": {"type": "integer", "minimum": 0},
+        "trials": {"type": "integer", "minimum": 0}
+      }
+    },
+    "artifacts": {"$ref": "evidence-capture.schema.json#/$defs/artifacts"},
+    "boundary": {"type": "string", "minLength": 1, "maxLength": 512}
+  }
+}

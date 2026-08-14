@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/evidence-capture.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "caseId", "capturedAt", "source", "rawDirectory", "execution", "artifacts", "cleanup"],
+  "properties": {
+    "schemaVersion": {"const": "chronicle.dev/evidence-capture/v1alpha1"},
+    "kind": {"enum": ["SemanticCapture", "BenchmarkCapture"]},
+    "caseId": {"$ref": "#/$defs/id"},
+    "capturedAt": {"type": "string", "format": "date-time"},
+    "source": {"$ref": "#/$defs/source"},
+    "rawDirectory": {"const": "raw"},
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exitCode", "stdoutSha256", "stderrSha256", "stdoutBytes", "stderrBytes", "state", "classification", "runId", "signature"],
+      "properties": {
+        "exitCode": {"type": "integer", "minimum": 0, "maximum": 130},
+        "stdoutSha256": {"$ref": "#/$defs/sha256"},
+        "stderrSha256": {"$ref": "#/$defs/sha256"},
+        "stdoutBytes": {"type": "integer", "minimum": 0, "maximum": 8388608},
+        "stderrBytes": {"type": "integer", "minimum": 0, "maximum": 8388608},
+        "state": {"type": "string", "minLength": 1},
+        "classification": {"type": "string", "minLength": 1},
+        "runId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "signature": {"oneOf": [{"type": "null"}, {"type": "object"}]}
+      }
+    },
+    "artifacts": {"$ref": "#/$defs/artifacts"},
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["containers", "networks", "volumes"],
+      "properties": {
+        "containers": {"const": 0},
+        "networks": {"const": 0},
+        "volumes": {"const": 0}
+      }
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "gitObject": {"type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"},
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 512},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "tree", "binarySha256", "binaryCommit", "argv", "inputs"],
+      "properties": {
+        "commit": {"$ref": "#/$defs/gitObject"},
+        "tree": {"$ref": "#/$defs/gitObject"},
+        "binarySha256": {"$ref": "#/$defs/sha256"},
+        "binaryCommit": {"type": "string", "pattern": "^[0-9a-f]{7,64}$"},
+        "argv": {"type": "array", "minItems": 2, "maxItems": 32, "items": {"type": "string", "maxLength": 512}},
+        "inputs": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"$ref": "#/$defs/input"}}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resultSha256", "checksumsSha256", "journalSha256", "bundleSha256"],
+      "properties": {
+        "resultSha256": {"$ref": "#/$defs/sha256"},
+        "checksumsSha256": {"$ref": "#/$defs/sha256"},
+        "journalSha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]},
+        "bundleSha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]}
+      }
+    }
+  }
+}

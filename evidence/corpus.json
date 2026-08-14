@@ -1,0 +1,193 @@
+{
+  "schemaVersion": "chronicle.dev/evidence-corpus/v1alpha1",
+  "semanticCases": [
+    {
+      "id": "r1-offset-rewind",
+      "claimId": "R1",
+      "role": "regression",
+      "scenario": "examples/order-lifecycle/scenarios/r1-offset-rewind-noisy.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/candidate.yaml",
+      "expectedExit": 2,
+      "expectedClassification": "SEMANTIC_REGRESSION",
+      "expectedSignature": "examples/order-lifecycle/expected/r1-signature.json",
+      "minimize": true
+    },
+    {
+      "id": "r1-single-delivery-control",
+      "claimId": "R1-control",
+      "role": "control",
+      "scenario": "examples/order-lifecycle/scenarios/r1-single-delivery-control.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/candidate.yaml",
+      "expectedExit": 0,
+      "expectedClassification": "PASS",
+      "expectedSignature": null,
+      "minimize": false
+    },
+    {
+      "id": "r2-crash-after-effect",
+      "claimId": "R2",
+      "role": "regression",
+      "scenario": "examples/order-lifecycle/scenarios/r2-crash-after-effect.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/r2-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/r2-candidate.yaml",
+      "expectedExit": 2,
+      "expectedClassification": "EXTERNAL_EFFECT_REGRESSION",
+      "expectedSignature": "examples/order-lifecycle/expected/r2-signature.json",
+      "minimize": false
+    },
+    {
+      "id": "r2-manual-commit-control",
+      "claimId": "R2-control",
+      "role": "control",
+      "scenario": "examples/order-lifecycle/scenarios/manual-offset-commit-control.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/r2-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/r2-candidate.yaml",
+      "expectedExit": 0,
+      "expectedClassification": "PASS",
+      "expectedSignature": null,
+      "minimize": false
+    },
+    {
+      "id": "r3-stale-aggregate",
+      "claimId": "R3",
+      "role": "regression",
+      "scenario": "examples/order-lifecycle/scenarios/r3-stale-aggregate-overwrite.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/state-r3-candidate.yaml",
+      "expectedExit": 2,
+      "expectedClassification": "SEMANTIC_REGRESSION",
+      "expectedSignature": "examples/order-lifecycle/expected/r3-signature.json",
+      "minimize": false
+    },
+    {
+      "id": "r3-monotonic-control",
+      "claimId": "R3-control",
+      "role": "control",
+      "scenario": "examples/order-lifecycle/scenarios/r3-monotonic-version-control.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/state-r3-candidate.yaml",
+      "expectedExit": 0,
+      "expectedClassification": "PASS",
+      "expectedSignature": null,
+      "minimize": false
+    },
+    {
+      "id": "r4-schema-default-drift",
+      "claimId": "R4",
+      "role": "regression",
+      "scenario": "examples/order-lifecycle/scenarios/r4-schema-default-drift.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/r4-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/r4-candidate.yaml",
+      "expectedExit": 2,
+      "expectedClassification": "SEMANTIC_REGRESSION",
+      "expectedSignature": "examples/order-lifecycle/expected/r4-signature.json",
+      "minimize": false
+    },
+    {
+      "id": "r4-defaulting-control",
+      "claimId": "R4-control",
+      "role": "control",
+      "scenario": "examples/order-lifecycle/scenarios/r4-explicit-default-control.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/r4-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/r4-candidate.yaml",
+      "expectedExit": 0,
+      "expectedClassification": "PASS",
+      "expectedSignature": null,
+      "minimize": false
+    },
+    {
+      "id": "r5-inventory-first",
+      "claimId": "R5",
+      "role": "regression",
+      "scenario": "examples/order-lifecycle/scenarios/r5-inventory-first-regression.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/state-r5-candidate.yaml",
+      "expectedExit": 2,
+      "expectedClassification": "SEMANTIC_REGRESSION",
+      "expectedSignature": "examples/order-lifecycle/expected/r5-signature.json",
+      "minimize": false
+    },
+    {
+      "id": "r5-payment-first-control",
+      "claimId": "R5-control",
+      "role": "control",
+      "scenario": "examples/order-lifecycle/scenarios/r5-payment-first-control.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/state-r5-candidate.yaml",
+      "expectedExit": 0,
+      "expectedClassification": "PASS",
+      "expectedSignature": null,
+      "minimize": false
+    },
+    {
+      "id": "r6-late-cancellation",
+      "claimId": "R6",
+      "role": "regression",
+      "scenario": "examples/order-lifecycle/scenarios/r6-late-cancellation.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/state-r6-candidate.yaml",
+      "expectedExit": 2,
+      "expectedClassification": "SEMANTIC_REGRESSION",
+      "expectedSignature": "examples/order-lifecycle/expected/r6-signature.json",
+      "minimize": false
+    },
+    {
+      "id": "r6-on-time-control",
+      "claimId": "R6-control",
+      "role": "control",
+      "scenario": "examples/order-lifecycle/scenarios/r6-on-time-cancellation-control.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/state-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/state-r6-candidate.yaml",
+      "expectedExit": 0,
+      "expectedClassification": "PASS",
+      "expectedSignature": null,
+      "minimize": false
+    },
+    {
+      "id": "r7-outbox-crash",
+      "claimId": "R7",
+      "role": "regression",
+      "scenario": "examples/order-lifecycle/scenarios/r7-outbox-crash-after-ack.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/r7-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/r7-candidate.yaml",
+      "expectedExit": 2,
+      "expectedClassification": "EXTERNAL_EFFECT_REGRESSION",
+      "expectedSignature": "examples/order-lifecycle/expected/r7-signature.json",
+      "minimize": false
+    },
+    {
+      "id": "r7-unrelated-orders-control",
+      "claimId": "R7-control",
+      "role": "control",
+      "scenario": "examples/order-lifecycle/scenarios/r7-unrelated-orders-control.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/r7-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/r7-candidate.yaml",
+      "expectedExit": 0,
+      "expectedClassification": "PASS",
+      "expectedSignature": null,
+      "minimize": false
+    }
+  ],
+  "benchmarkCases": [
+    {
+      "id": "benchmark-aa",
+      "role": "control",
+      "workload": "benchmarks/workloads/order-api.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
+      "expectedExit": 0,
+      "expectedClassification": "PASS"
+    },
+    {
+      "id": "benchmark-slowdown",
+      "role": "regression",
+      "workload": "benchmarks/workloads/order-api.yaml",
+      "baseline": "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
+      "candidate": "examples/order-lifecycle/targets/generated/benchmark-candidate.yaml",
+      "expectedExit": 2,
+      "expectedClassification": "PERFORMANCE_REGRESSION"
+    }
+  ]
+}

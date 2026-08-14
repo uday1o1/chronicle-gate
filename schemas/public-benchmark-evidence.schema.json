@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/public-benchmark-evidence.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "boundary", "comparisons"],
+  "properties": {
+    "schemaVersion": {"const": "chronicle.dev/public-benchmark-evidence/v1alpha1"},
+    "kind": {"const": "PublicBenchmarkEvidence"},
+    "boundary": {"type": "string", "minLength": 1, "maxLength": 512},
+    "comparisons": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {"$ref": "#/$defs/comparison"},
+        {"$ref": "#/$defs/comparison"}
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "capturedAt", "source", "outcome", "artifacts"],
+      "properties": {
+        "caseId": {"enum": ["benchmark-aa", "benchmark-slowdown"]},
+        "capturedAt": {"type": "string", "format": "date-time"},
+        "source": {"$ref": "evidence-capture.schema.json#/$defs/source"},
+        "outcome": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["exitCode", "state", "classification", "rounds", "baselineRequests", "candidateRequests", "baselineP95Nanos", "candidateP95Nanos", "meanAbsoluteP95DeltaNanos", "lowerRelativeCI", "upperRelativeCI", "regression"],
+          "properties": {
+            "exitCode": {"enum": [0, 2]},
+            "state": {"const": "COMPLETE"},
+            "classification": {"enum": ["PASS", "PERFORMANCE_REGRESSION"]},
+            "rounds": {"type": "integer", "minimum": 4, "maximum": 20},
+            "baselineRequests": {"type": "integer", "minimum": 1, "maximum": 1000000},
+            "candidateRequests": {"type": "integer", "minimum": 1, "maximum": 1000000},
+            "baselineP95Nanos": {"type": "integer", "minimum": 1},
+            "candidateP95Nanos": {"type": "integer", "minimum": 1},
+            "meanAbsoluteP95DeltaNanos": {"type": "number"},
+            "lowerRelativeCI": {"type": "number"},
+            "upperRelativeCI": {"type": "number"},
+            "regression": {"type": "boolean"}
+          }
+        },
+        "artifacts": {"$ref": "evidence-capture.schema.json#/$defs/artifacts"}
+      }
+    }
+  }
+}

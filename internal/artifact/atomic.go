@@ -3,6 +3,7 @@ package artifact
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -122,4 +123,68 @@ func WriteFile(path string, document []byte) error {
 	}
 	succeeded = true
 	return nil
+}
+
+// WriteNewJSON atomically creates a private JSON file and refuses to replace data.
+func WriteNewJSON(path string, value any) error {
+	document, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode artifact: %w", err)
+	}
+	document = append(document, '\n')
+	return WriteNewFile(path, document)
+}
+
+// WriteNewFile publishes through a hard link so an existing destination is never replaced.
+func WriteNewFile(path string, document []byte) error {
+	directoryPath := filepath.Dir(path)
+	if err := os.MkdirAll(directoryPath, 0o700); err != nil {
+		return fmt.Errorf("create artifact parent: %w", err)
+	}
+	file, err := os.CreateTemp(directoryPath, ".chronicle-new-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create artifact temporary file: %w", err)
+	}
+	temporary := file.Name()
+	linked := false
+	defer func() {
+		_ = file.Close()
+		_ = os.Remove(temporary)
+		if !linked {
+			_ = syncArtifactDirectory(directoryPath)
+		}
+	}()
+	if err := file.Chmod(0o600); err != nil {
+		return fmt.Errorf("secure artifact temporary file: %w", err)
+	}
+	if _, err := file.Write(document); err != nil {
+		return fmt.Errorf("write artifact: %w", err)
+	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync artifact: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close artifact: %w", err)
+	}
+	if err := os.Link(temporary, path); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("artifact destination %q already exists", path)
+		}
+		return fmt.Errorf("publish new artifact: %w", err)
+	}
+	linked = true
+	if err := os.Remove(temporary); err != nil {
+		return fmt.Errorf("remove artifact temporary link: %w", err)
+	}
+	return syncArtifactDirectory(directoryPath)
+}
+
+func syncArtifactDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open artifact directory: %w", err)
+	}
+	syncErr := directory.Sync()
+	closeErr := directory.Close()
+	return errors.Join(syncErr, closeErr)
 }

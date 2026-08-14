@@ -44,7 +44,7 @@ GO_ENV := env GOTOOLCHAIN=auto
 GOFMT_CMD := gofmt
 endif
 
-.PHONY: all benchmark-images build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint reference-images security-check test test-benchmark test-integration test-e2e test-race vet verify verify-common toolchain tidy
+.PHONY: all benchmark-images build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint reference-images release-check security-check test test-benchmark test-integration test-e2e test-race vet verify verify-common toolchain tidy
 
 all: build
 
@@ -127,13 +127,16 @@ test-race: toolchain
 security-check: toolchain
 	$(GO_CMD) run ./tools/security_check
 
+release-check: toolchain
+	$(GO_CMD) run ./tools/release_check
+
 govulncheck: toolchain
 	$(GO_CMD) run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
 tidy: toolchain
 	$(GO_CMD) mod tidy
 
-verify-common: fmt-check test vet test-race security-check govulncheck fuzz-smoke build build-cross
+verify-common: fmt-check test vet test-race security-check release-check govulncheck fuzz-smoke build build-cross
 
 verify: verify-common lint test-integration
 

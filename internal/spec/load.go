@@ -73,6 +73,10 @@ func DecodeTargetJSON(document []byte) (Target, error) {
 	return decodeJSONDocument(document, "Target", "target", Target{})
 }
 
+func DecodeResultJSON(document []byte) (Result, error) {
+	return decodeJSONDocument(document, "Result", "result", Result{})
+}
+
 // ValidateBenchmarkResultJSON validates a standalone benchmark result artifact.
 func ValidateBenchmarkResultJSON(document []byte) error {
 	var raw any

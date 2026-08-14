@@ -56,3 +56,21 @@ func TestPrepareDirectoryCreatesPrivateParents(t *testing.T) {
 		t.Fatalf("output info = mode %v", info.Mode())
 	}
 }
+
+func TestWriteNewFileRefusesOverwrite(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "evidence.json")
+	if err := WriteNewFile(path, []byte("first\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteNewFile(path, []byte("second\n")); err == nil {
+		t.Fatal("WriteNewFile() replaced an existing artifact")
+	}
+	document, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(document) != "first\n" {
+		t.Fatalf("artifact = %q", document)
+	}
+}
