@@ -52,6 +52,8 @@ For round `r`, baseline p95 is `B_r`, candidate p95 is `C_r`, absolute delta is 
 `B_r` must be positive.
 The absolute point estimate is the arithmetic mean of `A_r`, while the relative point estimate is the arithmetic mean of `D_r`.
 Pooled target quantiles are descriptive and never drive classification.
+Machine-readable analysis records label absolute deltas in nanoseconds and relative deltas as dimensionless ratios.
+Human-readable reports present the relative point estimate and its configured paired-bootstrap confidence interval together as percentages, while the absolute point estimate remains a separately labeled nanosecond quantity.
 
 The V1 analysis algorithm is `paired-percentile-bootstrap-v1` with block size one.
 Every bootstrap replicate resamples complete round pairs with replacement and computes the mean relative delta.

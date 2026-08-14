@@ -189,13 +189,20 @@ func Run(ctx context.Context, config Config) Report {
 			if analysisErr != nil {
 				runErr = &benchmarkError{kind: failureUnresolved, err: analysisErr}
 			} else {
-				report.Analysis = analysis
-				report.State = "COMPLETE"
-				report.Classification = "PASS"
-				if analysis.Regression {
-					report.Classification = "PERFORMANCE_REGRESSION"
+				pairs, pairErr := PairP95Trials(report.Trials, len(plan.Rounds))
+				if pairErr != nil {
+					runErr = &benchmarkError{kind: failureUnresolved, err: pairErr}
+				} else if validationErr := ValidateAnalysis(pairs, analysis); validationErr != nil {
+					runErr = &benchmarkError{kind: failureUnresolved, err: validationErr}
+				} else {
+					report.Analysis = analysis
+					report.State = "COMPLETE"
+					report.Classification = "PASS"
+					if analysis.Regression {
+						report.Classification = "PERFORMANCE_REGRESSION"
+					}
+					report.ValidityChecks = append(report.ValidityChecks, ValidityCheck{ID: "complete-paired-inventory", Status: "PASS", Message: fmt.Sprintf("%d paired rounds completed under the locked schedule", len(plan.Rounds))})
 				}
-				report.ValidityChecks = append(report.ValidityChecks, ValidityCheck{ID: "complete-paired-inventory", Status: "PASS", Message: fmt.Sprintf("%d paired rounds completed under the locked schedule", len(plan.Rounds))})
 			}
 		}
 	}

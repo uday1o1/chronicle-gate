@@ -1,8 +1,10 @@
 package bench
 
 import (
+	"math"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,17 +83,89 @@ func TestScheduleGoldenAndBalancedPairs(t *testing.T) {
 func TestPairedBootstrapAAndSlowdown(t *testing.T) {
 	baseline := []TrialSummary{{Round: 0, P95Nanos: 10}, {Round: 1, P95Nanos: 10}, {Round: 2, P95Nanos: 10}, {Round: 3, P95Nanos: 10}}
 	aa, err := Analyze(baseline, baseline, 9, 1000, 0.95, 0.5, 5)
-	if err != nil || aa.Regression || aa.LowerRelativeCI != 0 || aa.UpperRelativeCI != 0 {
+	if err != nil || aa.Regression || aa.LowerRelativeCI != 0 || aa.UpperRelativeCI != 0 || aa.AbsoluteP95DeltaUnit != AbsoluteP95DeltaUnit || aa.RelativeP95DeltaUnit != RelativeP95DeltaUnit {
 		t.Fatalf("A/A analysis = %#v, err=%v", aa, err)
 	}
 	candidate := []TrialSummary{{Round: 0, P95Nanos: 30}, {Round: 1, P95Nanos: 30}, {Round: 2, P95Nanos: 30}, {Round: 3, P95Nanos: 30}}
 	slow, err := Analyze(baseline, candidate, 9, 1000, 0.95, 0.5, 20)
-	if err != nil || !slow.Regression || slow.MeanAbsoluteP95DeltaNanos != 20 || slow.LowerRelativeCI != 2 {
+	if err != nil || !slow.Regression || slow.MeanAbsoluteP95DeltaNanos != 20 || slow.MeanRelativeP95Delta != 2 || slow.LowerRelativeCI != 2 {
 		t.Fatalf("slow analysis = %#v, err=%v", slow, err)
 	}
 	repeated, err := Analyze(baseline, candidate, 9, 1000, 0.95, 0.5, 20)
 	if err != nil || !reflect.DeepEqual(slow, repeated) {
 		t.Fatal("paired bootstrap is not deterministic")
+	}
+}
+
+func TestPairedAnalysisRecomputationFailsClosed(t *testing.T) {
+	trials := []TrialSummary{
+		{Round: 1, Target: "candidate", P95Nanos: 30},
+		{Round: 0, Target: "baseline", P95Nanos: 10},
+		{Round: 1, Target: "baseline", P95Nanos: 10},
+		{Round: 0, Target: "candidate", P95Nanos: 30},
+	}
+	pairs, err := PairP95Trials(trials, 2)
+	if err != nil || !reflect.DeepEqual(pairs, []P95Pair{{Round: 0, BaselineP95Nanos: 10, CandidateP95Nanos: 30}, {Round: 1, BaselineP95Nanos: 10, CandidateP95Nanos: 30}}) {
+		t.Fatalf("p95 pairs = %#v, err=%v", pairs, err)
+	}
+	analysis, err := Analyze(
+		[]TrialSummary{{Round: 0, P95Nanos: 10}, {Round: 1, P95Nanos: 10}},
+		[]TrialSummary{{Round: 0, P95Nanos: 30}, {Round: 1, P95Nanos: 30}},
+		9, 1000, 0.95, 0.5, 20,
+	)
+	if err != nil || ValidateAnalysis(pairs, analysis) != nil {
+		t.Fatalf("valid paired analysis failed: %#v, err=%v", analysis, err)
+	}
+	tampered := analysis
+	tampered.MeanRelativeP95Delta++
+	if err := ValidateAnalysis(pairs, tampered); err == nil {
+		t.Fatal("tampered relative point estimate passed recomputation")
+	}
+	tampered = analysis
+	tampered.LowerRelativeCI = math.NaN()
+	if err := ValidateAnalysis(pairs, tampered); err == nil {
+		t.Fatal("non-finite confidence bound passed recomputation")
+	}
+	duplicate := append(append([]TrialSummary(nil), trials[:3]...), trials[1])
+	if _, err := PairP95Trials(duplicate, 2); err == nil {
+		t.Fatal("duplicate and incomplete p95 inventory passed pairing")
+	}
+}
+
+func TestBenchmarkHumanReportsAlignEstimateIntervalAndUnits(t *testing.T) {
+	report := Report{
+		RunID: "bench-test", Classification: "PASS", State: "COMPLETE", EvidenceScope: "local-development",
+		Plan: PlanEvidence{Rounds: 4},
+		Analysis: Analysis{
+			MeanAbsoluteP95DeltaNanos: 12.5,
+			MeanRelativeP95Delta:      0.125,
+			Confidence:                0.9,
+			LowerRelativeCI:           0.1,
+			UpperRelativeCI:           0.2,
+		},
+	}
+	textReport := renderText(report)
+	for _, want := range []string{
+		"mean paired absolute p95 delta: 12.50 ns",
+		"mean paired relative p95 delta: 12.500000%",
+		"90.0% confidence interval for mean paired relative p95 delta: [10.000000%, 20.000000%]",
+	} {
+		if !strings.Contains(textReport, want) {
+			t.Fatalf("text report omits %q:\n%s", want, textReport)
+		}
+	}
+	htmlReport, err := renderHTML(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Mean paired absolute p95 delta</dt><dd>12.50 ns",
+		"Mean paired relative p95 delta</dt><dd>12.500000%",
+		"90.0% confidence interval for mean paired relative p95 delta</dt><dd>[10.000000%, 20.000000%]",
+	} {
+		if !strings.Contains(string(htmlReport), want) {
+			t.Fatalf("HTML report omits %q:\n%s", want, htmlReport)
+		}
 	}
 }
 

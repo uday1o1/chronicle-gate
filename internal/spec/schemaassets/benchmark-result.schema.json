@@ -102,13 +102,15 @@
     "analysis": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["algorithm", "bootstrapSeed", "bootstrapResamples", "confidence", "blockSize", "absoluteP95DeltasNanos", "relativeP95Deltas", "meanAbsoluteP95DeltaNanos", "meanRelativeP95Delta", "lowerRelativeCI", "upperRelativeCI", "lowerIndex", "upperIndex", "absoluteThresholdNanos", "relativeThreshold", "regression"],
+      "required": ["algorithm", "bootstrapSeed", "bootstrapResamples", "confidence", "blockSize", "absoluteP95DeltaUnit", "relativeP95DeltaUnit", "absoluteP95DeltasNanos", "relativeP95Deltas", "meanAbsoluteP95DeltaNanos", "meanRelativeP95Delta", "lowerRelativeCI", "upperRelativeCI", "lowerIndex", "upperIndex", "absoluteThresholdNanos", "relativeThreshold", "regression"],
       "properties": {
         "algorithm": {"const": "paired-percentile-bootstrap-v1"},
         "bootstrapSeed": {"type": "integer"},
         "bootstrapResamples": {"type": "integer", "minimum": 0},
         "confidence": {"type": "number"},
         "blockSize": {"const": 1},
+        "absoluteP95DeltaUnit": {"const": "nanoseconds"},
+        "relativeP95DeltaUnit": {"const": "ratio"},
         "absoluteP95DeltasNanos": {"type": "array", "items": {"type": "integer"}},
         "relativeP95Deltas": {"type": "array", "items": {"type": "number"}},
         "meanAbsoluteP95DeltaNanos": {"type": "number"},

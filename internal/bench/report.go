@@ -27,7 +27,8 @@ func emptyAnalysis(workload spec.BenchmarkWorkload) Analysis {
 	return Analysis{
 		Algorithm: spec.BenchmarkBootstrapAlgorithm, BootstrapSeed: workload.Spec.Analysis.BootstrapSeed,
 		BootstrapResamples: workload.Spec.Analysis.BootstrapResamples, Confidence: workload.Spec.Analysis.Confidence,
-		BlockSize: 1, AbsoluteP95DeltasNanos: []int64{}, RelativeP95Deltas: []float64{},
+		BlockSize: 1, AbsoluteP95DeltaUnit: AbsoluteP95DeltaUnit, RelativeP95DeltaUnit: RelativeP95DeltaUnit,
+		AbsoluteP95DeltasNanos: []int64{}, RelativeP95Deltas: []float64{},
 		AbsoluteThresholdNanos: workload.Spec.Analysis.MinAbsoluteP95Delta.Nanoseconds(),
 		RelativeThreshold:      workload.Spec.Analysis.MinRelativeP95Delta,
 	}
@@ -194,19 +195,21 @@ func benchmarkArtifactPaths() map[string]string {
 }
 
 func renderText(report Report) string {
-	return fmt.Sprintf("ChronicleGate benchmark %s\nclassification: %s\nstate: %s\npaired rounds: %d\nmean p95 delta: %.0f ns\nrelative 95%% CI: [%.6f, %.6f]\nevidence scope: %s\nlimitation: local comparative results do not generalize to production capacity.\n",
+	return fmt.Sprintf("ChronicleGate benchmark %s\nclassification: %s\nstate: %s\npaired rounds: %d\nmean paired absolute p95 delta: %.2f ns\nmean paired relative p95 delta: %.6f%%\n%.1f%% confidence interval for mean paired relative p95 delta: [%.6f%%, %.6f%%]\nevidence scope: %s\nlimitation: local comparative results do not generalize to production capacity.\n",
 		report.RunID, report.Classification, report.State, report.Plan.Rounds, report.Analysis.MeanAbsoluteP95DeltaNanos,
-		report.Analysis.LowerRelativeCI, report.Analysis.UpperRelativeCI, report.EvidenceScope)
+		report.Analysis.MeanRelativeP95Delta*100, report.Analysis.Confidence*100,
+		report.Analysis.LowerRelativeCI*100, report.Analysis.UpperRelativeCI*100, report.EvidenceScope)
 }
 
 func renderHTML(report Report) ([]byte, error) {
-	page := template.Must(template.New("benchmark").Parse(`<!doctype html>
+	page := template.Must(template.New("benchmark").Funcs(template.FuncMap{"percent": func(value float64) float64 { return value * 100 }}).Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>ChronicleGate benchmark</title></head>
 <body><main><h1>ChronicleGate benchmark</h1><dl>
 <dt>Run</dt><dd>{{.RunID}}</dd><dt>Classification</dt><dd>{{.Classification}}</dd>
 <dt>State</dt><dd>{{.State}}</dd><dt>Paired rounds</dt><dd>{{.Plan.Rounds}}</dd>
-<dt>Mean p95 delta</dt><dd>{{printf "%.0f" .Analysis.MeanAbsoluteP95DeltaNanos}} ns</dd>
-<dt>Relative confidence interval</dt><dd>[{{printf "%.6f" .Analysis.LowerRelativeCI}}, {{printf "%.6f" .Analysis.UpperRelativeCI}}]</dd>
+<dt>Mean paired absolute p95 delta</dt><dd>{{printf "%.2f" .Analysis.MeanAbsoluteP95DeltaNanos}} ns</dd>
+<dt>Mean paired relative p95 delta</dt><dd>{{printf "%.6f" (percent .Analysis.MeanRelativeP95Delta)}}%</dd>
+<dt>{{printf "%.1f" (percent .Analysis.Confidence)}}% confidence interval for mean paired relative p95 delta</dt><dd>[{{printf "%.6f" (percent .Analysis.LowerRelativeCI)}}%, {{printf "%.6f" (percent .Analysis.UpperRelativeCI)}}%]</dd>
 <dt>Evidence scope</dt><dd>{{.EvidenceScope}}</dd></dl>
 <p>Local comparative results do not generalize to production capacity.</p></main></body></html>
 `))

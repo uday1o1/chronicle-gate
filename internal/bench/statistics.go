@@ -3,7 +3,13 @@ package bench
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"slices"
+)
+
+const (
+	AbsoluteP95DeltaUnit = "nanoseconds"
+	RelativeP95DeltaUnit = "ratio"
 )
 
 type TrialSummary struct {
@@ -50,6 +56,8 @@ type Analysis struct {
 	BootstrapResamples        int       `json:"bootstrapResamples"`
 	Confidence                float64   `json:"confidence"`
 	BlockSize                 int       `json:"blockSize"`
+	AbsoluteP95DeltaUnit      string    `json:"absoluteP95DeltaUnit"`
+	RelativeP95DeltaUnit      string    `json:"relativeP95DeltaUnit"`
 	AbsoluteP95DeltasNanos    []int64   `json:"absoluteP95DeltasNanos"`
 	RelativeP95Deltas         []float64 `json:"relativeP95Deltas"`
 	MeanAbsoluteP95DeltaNanos float64   `json:"meanAbsoluteP95DeltaNanos"`
@@ -61,6 +69,12 @@ type Analysis struct {
 	AbsoluteThresholdNanos    int64     `json:"absoluteThresholdNanos"`
 	RelativeThreshold         float64   `json:"relativeThreshold"`
 	Regression                bool      `json:"regression"`
+}
+
+type P95Pair struct {
+	Round             int   `json:"round"`
+	BaselineP95Nanos  int64 `json:"baselineP95Nanos"`
+	CandidateP95Nanos int64 `json:"candidateP95Nanos"`
 }
 
 func Summarize(round int, target string, latencies []int64, successes int, seconds float64) (TrialSummary, error) {
@@ -105,11 +119,12 @@ func summarizeTarget(target string, latencies []int64, successes int, seconds fl
 }
 
 func Analyze(baseline, candidate []TrialSummary, seed int64, resamples int, confidence, relativeThreshold float64, absoluteThreshold int64) (Analysis, error) {
-	if len(baseline) == 0 || len(baseline) != len(candidate) || resamples <= 0 || confidence <= 0 || confidence >= 1 || absoluteThreshold < 0 {
+	if len(baseline) == 0 || len(baseline) != len(candidate) || resamples <= 0 || confidence <= 0 || confidence >= 1 || !finite(confidence) || relativeThreshold < 0 || !finite(relativeThreshold) || absoluteThreshold < 0 {
 		return Analysis{}, fmt.Errorf("paired analysis inputs are invalid")
 	}
 	result := Analysis{
 		Algorithm: specBootstrapAlgorithm, BootstrapSeed: seed, BootstrapResamples: resamples, Confidence: confidence, BlockSize: 1,
+		AbsoluteP95DeltaUnit: AbsoluteP95DeltaUnit, RelativeP95DeltaUnit: RelativeP95DeltaUnit,
 		AbsoluteP95DeltasNanos: make([]int64, len(baseline)), RelativeP95Deltas: make([]float64, len(baseline)),
 		AbsoluteThresholdNanos: absoluteThreshold, RelativeThreshold: relativeThreshold,
 	}
@@ -149,6 +164,108 @@ func Analyze(baseline, candidate []TrialSummary, seed int64, resamples int, conf
 	}
 	result.Regression = absoluteSum >= absoluteThreshold*int64(len(baseline)) && result.LowerRelativeCI > relativeThreshold
 	return result, nil
+}
+
+func PairP95Trials(trials []TrialSummary, rounds int) ([]P95Pair, error) {
+	if rounds <= 0 || len(trials) != rounds*2 {
+		return nil, fmt.Errorf("paired p95 inventory has %d trials over %d rounds", len(trials), rounds)
+	}
+	pairs := make([]P95Pair, rounds)
+	baselineSeen := make([]bool, rounds)
+	candidateSeen := make([]bool, rounds)
+	for round := range pairs {
+		pairs[round].Round = round
+	}
+	for _, trial := range trials {
+		if trial.Round < 0 || trial.Round >= rounds || trial.P95Nanos <= 0 {
+			return nil, fmt.Errorf("invalid p95 trial for round %d and target %q", trial.Round, trial.Target)
+		}
+		switch trial.Target {
+		case "baseline":
+			if baselineSeen[trial.Round] {
+				return nil, fmt.Errorf("duplicate baseline p95 trial for round %d", trial.Round)
+			}
+			baselineSeen[trial.Round] = true
+			pairs[trial.Round].BaselineP95Nanos = trial.P95Nanos
+		case "candidate":
+			if candidateSeen[trial.Round] {
+				return nil, fmt.Errorf("duplicate candidate p95 trial for round %d", trial.Round)
+			}
+			candidateSeen[trial.Round] = true
+			pairs[trial.Round].CandidateP95Nanos = trial.P95Nanos
+		default:
+			return nil, fmt.Errorf("unexpected p95 trial target %q", trial.Target)
+		}
+	}
+	for round := range pairs {
+		if !baselineSeen[round] || !candidateSeen[round] {
+			return nil, fmt.Errorf("incomplete p95 pair for round %d", round)
+		}
+	}
+	return pairs, nil
+}
+
+func RecomputeAnalysis(pairs []P95Pair, configuration Analysis) (Analysis, error) {
+	if configuration.Algorithm != specBootstrapAlgorithm || configuration.BlockSize != 1 || configuration.AbsoluteP95DeltaUnit != AbsoluteP95DeltaUnit || configuration.RelativeP95DeltaUnit != RelativeP95DeltaUnit {
+		return Analysis{}, fmt.Errorf("paired analysis metadata is invalid")
+	}
+	if len(pairs) == 0 {
+		return Analysis{}, fmt.Errorf("paired analysis has no p95 pairs")
+	}
+	baseline := make([]TrialSummary, len(pairs))
+	candidate := make([]TrialSummary, len(pairs))
+	for index, pair := range pairs {
+		if pair.Round != index || pair.BaselineP95Nanos <= 0 || pair.CandidateP95Nanos <= 0 {
+			return Analysis{}, fmt.Errorf("p95 pair %d is invalid", index)
+		}
+		baseline[index] = TrialSummary{Round: pair.Round, Target: "baseline", P95Nanos: pair.BaselineP95Nanos}
+		candidate[index] = TrialSummary{Round: pair.Round, Target: "candidate", P95Nanos: pair.CandidateP95Nanos}
+	}
+	return Analyze(
+		baseline,
+		candidate,
+		configuration.BootstrapSeed,
+		configuration.BootstrapResamples,
+		configuration.Confidence,
+		configuration.RelativeThreshold,
+		configuration.AbsoluteThresholdNanos,
+	)
+}
+
+func ValidateAnalysis(pairs []P95Pair, recorded Analysis) error {
+	if !analysisFinite(recorded) || recorded.LowerRelativeCI > recorded.UpperRelativeCI {
+		return fmt.Errorf("paired analysis contains invalid numeric evidence")
+	}
+	recomputed, err := RecomputeAnalysis(pairs, recorded)
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(recomputed, recorded) {
+		return fmt.Errorf("paired analysis does not match deterministic recomputation")
+	}
+	return nil
+}
+
+func analysisFinite(analysis Analysis) bool {
+	values := []float64{
+		analysis.Confidence,
+		analysis.MeanAbsoluteP95DeltaNanos,
+		analysis.MeanRelativeP95Delta,
+		analysis.LowerRelativeCI,
+		analysis.UpperRelativeCI,
+		analysis.RelativeThreshold,
+	}
+	values = append(values, analysis.RelativeP95Deltas...)
+	for _, value := range values {
+		if !finite(value) {
+			return false
+		}
+	}
+	return true
+}
+
+func finite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 const specBootstrapAlgorithm = "paired-percentile-bootstrap-v1"
