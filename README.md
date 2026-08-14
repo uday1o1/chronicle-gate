@@ -3,8 +3,8 @@
 ChronicleGate is a local release-qualification framework for instrumented Kafka-style stateful consumers.
 It is being implemented milestone by milestone according to [BUILD_PLAN.md](BUILD_PLAN.md).
 
-Milestones 0 through 8 are complete, including the portfolio-ready core checkpoint, the complete V1 observer model, the controlled cross-stream and event-time corpus, the connected transactional-outbox corpus, and the robustness and security gate.
-Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, schema-compatible R4 default drift, stale-version R3, cross-stream R5, late-event R6, duplicate-publication R7, bounded cleanup, safe archives, runtime hardening, dependency review, race tests, and fuzz smoke tests pass their local acceptance gates.
+Milestones 0 through 9 are complete, including the portfolio-ready core checkpoint, the complete V1 observer model, the controlled cross-stream and event-time corpus, the connected transactional-outbox corpus, the robustness and security gate, and the isolated performance command.
+Reproducible bootstrap, immutable image locks, environment diagnostics, typed authored contracts, offline validation, broker-realistic R1, stable failure confirmation, dependency-safe reduction, multi-format reports, verified replay bundles, authenticated precise checkpoints, R2 crash recovery, manual synchronous offset-commit proof, schema-compatible R4 default drift, stale-version R3, cross-stream R5, late-event R6, duplicate-publication R7, bounded cleanup, safe archives, runtime hardening, dependency review, race tests, fuzz smoke tests, and paired open-loop performance comparison pass their local acceptance gates.
 
 ## Bootstrap
 
@@ -20,6 +20,30 @@ make verify
 
 `doctor` checks host workspace capacity and loopback port allocation, then verifies the Docker server and every locked OCI image index.
 The disk and loopback checks describe host-visible resources only.
+
+## Run the isolated performance gate
+
+`chronicle bench` uses a separate contract, runtime, artifact set, statistical policy, and exit status from semantic qualification.
+It precomputes balanced paired trials and byte-identical per-round request streams, then applies a fixed open-loop schedule without waiting for prior responses.
+The repository fixture compares a 1 ms stdlib-only reference endpoint with either the identical image or a build-time 20 ms seeded slowdown.
+
+```sh
+make benchmark-images
+make build
+./bin/chronicle bench \
+  --workload benchmarks/workloads/order-api.yaml \
+  --baseline examples/order-lifecycle/targets/generated/benchmark-baseline.yaml \
+  --candidate examples/order-lifecycle/targets/generated/benchmark-candidate.yaml \
+  --out run/benchmark \
+  --development-local-images \
+  --json
+```
+
+The seeded slowdown returns exit code `2` only when both the exact absolute p95 threshold and the lower paired-bootstrap relative confidence bound pass the predeclared policy.
+An A/A comparison uses the baseline target for both arguments and must return exit code `0`.
+Reports preserve the full execution plan, raw request timings, raw Docker resource samples, target identities, instrumentation-absence evidence, text and HTML summaries, and streaming checksums.
+Local macOS or Colima results are comparative development evidence and do not generalize to production capacity.
+See [`docs/benchmarking.md`](docs/benchmarking.md) for the locked estimator, validity rules, publication boundary, and limitations.
 
 ## Validate authored contracts
 

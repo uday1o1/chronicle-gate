@@ -20,11 +20,13 @@ var (
 )
 
 var schemaFiles = map[string]string{
-	"Scenario": "scenario.schema.json",
-	"Target":   "target.schema.json",
-	"Workload": "workload.schema.json",
-	"Result":   "result.schema.json",
-	"Bundle":   "bundle.schema.json",
+	"Scenario":          "scenario.schema.json",
+	"Target":            "target.schema.json",
+	"Workload":          "workload.schema.json",
+	"Result":            "result.schema.json",
+	"Bundle":            "bundle.schema.json",
+	"BenchmarkWorkload": "benchmark-workload.schema.json",
+	"BenchmarkResult":   "benchmark-result.schema.json",
 }
 
 type denyLoader struct{}

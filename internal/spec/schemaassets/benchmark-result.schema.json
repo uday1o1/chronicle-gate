@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/benchmark-result.schema.json",
+  "title": "ChronicleGate Benchmark Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "runId", "state", "classification", "startedAt", "completedAt", "evidenceScope", "plan", "targets", "trials", "aggregates", "analysis", "validityChecks", "instrumentation", "environment", "artifacts"],
+  "properties": {
+    "apiVersion": {"const": "chronicle.dev/v1alpha1"},
+    "kind": {"const": "BenchmarkResult"},
+    "runId": {"type": "string", "minLength": 1},
+    "state": {"enum": ["RUNNING", "CLEANING", "COMPLETE", "INTERRUPTED", "INFRASTRUCTURE_ERROR", "TIMEOUT", "UNRESOLVED"]},
+    "classification": {"enum": ["PASS", "PERFORMANCE_REGRESSION", "INFRASTRUCTURE_ERROR", "TIMEOUT", "UNRESOLVED"]},
+    "startedAt": {"type": "string", "format": "date-time"},
+    "completedAt": {"type": "string", "format": "date-time"},
+    "evidenceScope": {"enum": ["local-development", "publication"]},
+    "plan": {"$ref": "#/$defs/plan"},
+    "targets": {"type": "array", "minItems": 0, "maxItems": 2, "items": {"$ref": "#/$defs/target"}},
+    "trials": {"type": "array", "items": {"$ref": "#/$defs/trial"}},
+    "aggregates": {"type": "array", "minItems": 0, "maxItems": 2, "items": {"$ref": "#/$defs/targetSummary"}},
+    "analysis": {"$ref": "#/$defs/analysis"},
+    "validityChecks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+    "instrumentation": {"$ref": "#/$defs/instrumentation"},
+    "environment": {"type": "object"},
+    "artifacts": {"type": "object", "additionalProperties": {"type": "string"}},
+    "error": {"type": "string"}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "sha256", "rounds"],
+      "properties": {
+        "algorithm": {"const": "chronicle-schedule-v1"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "rounds": {"type": "integer", "minimum": 0, "maximum": 20}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "authoredImage", "executedImageId", "portable"],
+      "properties": {
+        "role": {"enum": ["baseline", "candidate"]},
+        "authoredImage": {"type": "string"},
+        "platformDigest": {"type": "string"},
+        "executedImageId": {"type": "string"},
+        "portable": {"type": "boolean"}
+      }
+    },
+    "trial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["round", "target", "requests", "successes", "p50Nanos", "p95Nanos", "p99Nanos", "throughputPerSecond", "errorRate", "valid", "resource"],
+      "properties": {
+        "round": {"type": "integer", "minimum": 0},
+        "target": {"enum": ["baseline", "candidate"]},
+        "requests": {"type": "integer", "minimum": 0},
+        "successes": {"type": "integer", "minimum": 0},
+        "p50Nanos": {"type": "integer", "minimum": 0},
+        "p95Nanos": {"type": "integer", "minimum": 0},
+        "p99Nanos": {"type": "integer", "minimum": 0},
+        "throughputPerSecond": {"type": "number", "minimum": 0},
+        "errorRate": {"type": "number", "minimum": 0, "maximum": 1},
+        "valid": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "resource": {"$ref": "#/$defs/resource"}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["samples", "cpuUsageDeltaNanos", "maxMemoryUsageBytes", "memoryLimitBytes", "maxPids", "throttleAvailable", "throttledPeriodsDelta", "throttledTimeDeltaNanos"],
+      "properties": {
+        "samples": {"type": "integer", "minimum": 0},
+        "cpuUsageDeltaNanos": {"type": "integer", "minimum": 0},
+        "maxMemoryUsageBytes": {"type": "integer", "minimum": 0},
+        "memoryLimitBytes": {"type": "integer", "minimum": 0},
+        "maxPids": {"type": "integer", "minimum": 0},
+        "throttleAvailable": {"type": "boolean"},
+        "throttledPeriodsDelta": {"type": "integer", "minimum": 0},
+        "throttledTimeDeltaNanos": {"type": "integer", "minimum": 0}
+      }
+    },
+    "targetSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "requests", "successes", "p50Nanos", "p95Nanos", "p99Nanos", "throughputPerSecond", "errorRate", "resource"],
+      "properties": {
+        "target": {"enum": ["baseline", "candidate"]},
+        "requests": {"type": "integer", "minimum": 0},
+        "successes": {"type": "integer", "minimum": 0},
+        "p50Nanos": {"type": "integer", "minimum": 0},
+        "p95Nanos": {"type": "integer", "minimum": 0},
+        "p99Nanos": {"type": "integer", "minimum": 0},
+        "throughputPerSecond": {"type": "number", "minimum": 0},
+        "errorRate": {"type": "number", "minimum": 0, "maximum": 1},
+        "resource": {"$ref": "#/$defs/resource"}
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "bootstrapSeed", "bootstrapResamples", "confidence", "blockSize", "absoluteP95DeltasNanos", "relativeP95Deltas", "meanAbsoluteP95DeltaNanos", "meanRelativeP95Delta", "lowerRelativeCI", "upperRelativeCI", "lowerIndex", "upperIndex", "absoluteThresholdNanos", "relativeThreshold", "regression"],
+      "properties": {
+        "algorithm": {"const": "paired-percentile-bootstrap-v1"},
+        "bootstrapSeed": {"type": "integer"},
+        "bootstrapResamples": {"type": "integer", "minimum": 0},
+        "confidence": {"type": "number"},
+        "blockSize": {"const": 1},
+        "absoluteP95DeltasNanos": {"type": "array", "items": {"type": "integer"}},
+        "relativeP95Deltas": {"type": "array", "items": {"type": "number"}},
+        "meanAbsoluteP95DeltaNanos": {"type": "number"},
+        "meanRelativeP95Delta": {"type": "number"},
+        "lowerRelativeCI": {"type": "number"},
+        "upperRelativeCI": {"type": "number"},
+        "lowerIndex": {"type": "integer", "minimum": 0},
+        "upperIndex": {"type": "integer", "minimum": 0},
+        "absoluteThresholdNanos": {"type": "integer", "minimum": 0},
+        "relativeThreshold": {"type": "number", "minimum": 0},
+        "regression": {"type": "boolean"}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "message"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["PASS", "FAIL", "UNAVAILABLE"]},
+        "message": {"type": "string"}
+      }
+    },
+    "instrumentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harnessCorrectnessInstrumentationAbsent", "probeDisabled", "telemetryEnvironmentAbsent", "secretMountsAbsent", "dockerHealthcheckDisabled", "automaticCompressionDisabled", "targetBinaryInternalsProven", "claim"],
+      "properties": {
+        "harnessCorrectnessInstrumentationAbsent": {"type": "boolean"},
+        "probeDisabled": {"type": "boolean"},
+        "telemetryEnvironmentAbsent": {"type": "boolean"},
+        "secretMountsAbsent": {"type": "boolean"},
+        "dockerHealthcheckDisabled": {"type": "boolean"},
+        "automaticCompressionDisabled": {"type": "boolean"},
+        "targetBinaryInternalsProven": {"type": "boolean"},
+        "claim": {"type": "string"}
+      }
+    }
+  }
+}

@@ -53,6 +53,10 @@ func TestCheckerStableOrderAndSuccess(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
+	workspace, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
 	lockPath := filepath.Join(directory, "images.lock.json")
 	digestA := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	digestB := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -70,7 +74,7 @@ func TestCheckerStableOrderAndSuccess(t *testing.T) {
 		"docker manifest inspect example.invalid/image@" + digestA: {stdout: manifest},
 	}}
 	report := New(Options{
-		Workspace:             directory,
+		Workspace:             workspace,
 		ImageLockPath:         lockPath,
 		MinimumAvailableBytes: 1,
 		Runner:                runner,

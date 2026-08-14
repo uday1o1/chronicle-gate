@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/spf13/cobra"
+	"github.com/uday1o1/chronicle-gate/internal/bench"
 	"github.com/uday1o1/chronicle-gate/internal/buildinfo"
 	"github.com/uday1o1/chronicle-gate/internal/doctor"
 	"github.com/uday1o1/chronicle-gate/internal/engine"
@@ -21,6 +22,7 @@ type Dependencies struct {
 	Doctor *doctor.Checker
 	Build  buildinfo.Info
 	Run    func(context.Context, engine.Config) engine.Report
+	Bench  func(context.Context, bench.Config) bench.Report
 }
 
 // Execute runs ChronicleGate without terminating the process.
@@ -66,6 +68,9 @@ func newRootCommand(dependencies Dependencies) *cobra.Command {
 	if dependencies.Run == nil {
 		dependencies.Run = engine.Run
 	}
+	if dependencies.Bench == nil {
+		dependencies.Bench = bench.Run
+	}
 
 	root := &cobra.Command{
 		Use:           "chronicle",
@@ -84,5 +89,6 @@ func newRootCommand(dependencies Dependencies) *cobra.Command {
 	root.AddCommand(newRunCommand(dependencies.Run))
 	root.AddCommand(newReportCommand())
 	root.AddCommand(newReplayCommand(dependencies.Run))
+	root.AddCommand(newBenchCommand(dependencies.Bench))
 	return root
 }

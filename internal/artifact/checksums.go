@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -42,12 +44,11 @@ func WriteChecksums(root string, excluded map[string]struct{}) error {
 	sort.Strings(paths)
 	var output strings.Builder
 	for _, relative := range paths {
-		document, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		digest, err := hashFile(filepath.Join(root, filepath.FromSlash(relative)))
 		if err != nil {
 			return fmt.Errorf("hash artifact %q: %w", relative, err)
 		}
-		digest := sha256.Sum256(document)
-		fmt.Fprintf(&output, "%s  %s\n", hex.EncodeToString(digest[:]), relative)
+		fmt.Fprintf(&output, "%s  %s\n", digest, relative)
 	}
 	return WriteFile(filepath.Join(root, "checksums.sha256"), []byte(output.String()))
 }
@@ -75,12 +76,11 @@ func VerifyChecksums(root string) error {
 			return fmt.Errorf("duplicate artifact checksum path %q", name)
 		}
 		seen[name] = struct{}{}
-		document, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		digest, err := hashFile(filepath.Join(root, filepath.FromSlash(name)))
 		if err != nil {
 			return fmt.Errorf("read checksummed artifact %q: %w", name, err)
 		}
-		digest := sha256.Sum256(document)
-		if hex.EncodeToString(digest[:]) != parts[0] {
+		if digest != parts[0] {
 			return fmt.Errorf("artifact checksum mismatch for %q", name)
 		}
 	}
@@ -110,4 +110,18 @@ func VerifyChecksums(root string) error {
 		}
 		return nil
 	})
+}
+
+func hashFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.New()
+	_, copyErr := io.Copy(digest, file)
+	closeErr := file.Close()
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(digest.Sum(nil)), nil
 }

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chronicle.dev/schemas/benchmark-workload.schema.json",
+  "title": "ChronicleGate Benchmark Workload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {"const": "chronicle.dev/v1alpha1"},
+    "kind": {"const": "BenchmarkWorkload"},
+    "metadata": {"$ref": "#/$defs/metadata"},
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "evidenceScope", "operations", "schedule", "analysis", "validity", "resourceSampleInterval"],
+      "properties": {
+        "service": {"$ref": "#/$defs/name"},
+        "evidenceScope": {"enum": ["local-development", "publication"]},
+        "operations": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"$ref": "#/$defs/operation"}},
+        "schedule": {"$ref": "#/$defs/schedule"},
+        "analysis": {"$ref": "#/$defs/analysis"},
+        "validity": {"$ref": "#/$defs/validity"},
+        "resourceSampleInterval": {"$ref": "#/$defs/duration"}
+      }
+    }
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"$ref": "#/$defs/name"},
+        "description": {"type": "string"}
+      }
+    },
+    "duration": {"type": "string", "pattern": "^(0|[1-9][0-9]*)(ns|us|µs|ms|s|m|h)([0-9]+(ns|us|µs|ms|s|m|h))*$"},
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "weight", "method", "path", "headers", "body", "expectedStatuses"],
+      "properties": {
+        "id": {"$ref": "#/$defs/name"},
+        "weight": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "method": {"enum": ["GET", "POST"]},
+        "path": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "headers": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {"pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"},
+          "additionalProperties": {"type": "string", "maxLength": 8192}
+        },
+        "body": {"type": "string", "maxLength": 65536},
+        "expectedStatuses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 100, "maximum": 599}
+        }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "ratePerSecond", "warmup", "measurement", "requestTimeout", "maxInFlight", "maxScheduleLag", "rounds", "orderSeed", "requestSeed"],
+      "properties": {
+        "algorithm": {"const": "chronicle-schedule-v1"},
+        "ratePerSecond": {"type": "integer", "minimum": 1, "maximum": 500},
+        "warmup": {"$ref": "#/$defs/duration"},
+        "measurement": {"$ref": "#/$defs/duration"},
+        "requestTimeout": {"$ref": "#/$defs/duration"},
+        "maxInFlight": {"type": "integer", "minimum": 1, "maximum": 512},
+        "maxScheduleLag": {"$ref": "#/$defs/duration"},
+        "rounds": {"type": "integer", "minimum": 4, "maximum": 20, "multipleOf": 2},
+        "orderSeed": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+        "requestSeed": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "bootstrapSeed", "bootstrapResamples", "confidence", "blockSize", "minRelativeP95Delta", "minAbsoluteP95Delta"],
+      "properties": {
+        "algorithm": {"const": "paired-percentile-bootstrap-v1"},
+        "bootstrapSeed": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+        "bootstrapResamples": {"type": "integer", "minimum": 1000, "maximum": 100000},
+        "confidence": {"type": "number", "minimum": 0.8, "maximum": 0.999},
+        "blockSize": {"const": 1},
+        "minRelativeP95Delta": {"type": "number", "minimum": 0, "maximum": 10},
+        "minAbsoluteP95Delta": {"$ref": "#/$defs/duration"}
+      }
+    },
+    "validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxResponseHeaderBytes", "maxResponseBodyBytes", "maxRawTimingBytes", "maxResourceBytes", "maxOutputBytes"],
+      "properties": {
+        "maxResponseHeaderBytes": {"type": "integer", "minimum": 1024, "maximum": 32768},
+        "maxResponseBodyBytes": {"type": "integer", "minimum": 1, "maximum": 1048576},
+        "maxRawTimingBytes": {"type": "integer", "minimum": 1, "maximum": 1073741824},
+        "maxResourceBytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
+        "maxOutputBytes": {"type": "integer", "minimum": 1, "maximum": 1610612736}
+      }
+    }
+  }
+}

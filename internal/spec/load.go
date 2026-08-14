@@ -37,6 +37,14 @@ func LoadWorkload(path string) (Workload, error) {
 	return value, nil
 }
 
+func LoadBenchmarkWorkload(path string) (BenchmarkWorkload, error) {
+	var value BenchmarkWorkload
+	if err := loadYAML(path, "BenchmarkWorkload", &value); err != nil {
+		return BenchmarkWorkload{}, err
+	}
+	return value, nil
+}
+
 func LoadResult(path string) (Result, error) {
 	var value Result
 	if err := loadJSON(path, "Result", &value); err != nil {
@@ -63,6 +71,19 @@ func DecodeScenarioJSON(document []byte) (Scenario, error) {
 
 func DecodeTargetJSON(document []byte) (Target, error) {
 	return decodeJSONDocument(document, "Target", "target", Target{})
+}
+
+// ValidateBenchmarkResultJSON validates a standalone benchmark result artifact.
+func ValidateBenchmarkResultJSON(document []byte) error {
+	var raw any
+	decoder := json.NewDecoder(bytes.NewReader(document))
+	if err := decoder.Decode(&raw); err != nil {
+		return fmt.Errorf("parse benchmark result: %w", err)
+	}
+	if err := ensureJSONEOF(decoder, "benchmark result"); err != nil {
+		return err
+	}
+	return validateSchema("BenchmarkResult", raw)
 }
 
 func decodeJSONDocument[T any](document []byte, kind, label string, zero T) (T, error) {

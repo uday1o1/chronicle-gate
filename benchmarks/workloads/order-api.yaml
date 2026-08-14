@@ -1,0 +1,43 @@
+apiVersion: chronicle.dev/v1alpha1
+kind: BenchmarkWorkload
+metadata:
+  name: order-api-open-loop
+  description: Fixed open-loop comparison of the repository stdlib-only benchmark endpoint.
+spec:
+  service: benchmark-api
+  evidenceScope: local-development
+  operations:
+    - id: synthetic-work
+      weight: 100
+      method: POST
+      path: /work
+      headers:
+        Content-Type: application/json
+      body: '{"work":"synthetic"}'
+      expectedStatuses: [200]
+  schedule:
+    algorithm: chronicle-schedule-v1
+    ratePerSecond: 20
+    warmup: 500ms
+    measurement: 2s
+    requestTimeout: 1s
+    maxInFlight: 16
+    maxScheduleLag: 100ms
+    rounds: 4
+    orderSeed: 20260813
+    requestSeed: 31415926
+  analysis:
+    algorithm: paired-percentile-bootstrap-v1
+    bootstrapSeed: 27182818
+    bootstrapResamples: 5000
+    confidence: 0.95
+    blockSize: 1
+    minRelativeP95Delta: 0.5
+    minAbsoluteP95Delta: 10ms
+  validity:
+    maxResponseHeaderBytes: 32768
+    maxResponseBodyBytes: 1048576
+    maxRawTimingBytes: 33554432
+    maxResourceBytes: 16777216
+    maxOutputBytes: 67108864
+  resourceSampleInterval: 250ms

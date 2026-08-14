@@ -20,6 +20,8 @@ REFERENCE_ORDER_API_IMAGE := chronicle-gate/order-api:baseline-m7
 REFERENCE_OUTBOX_RELAY_BASELINE_IMAGE := chronicle-gate/outbox-relay:baseline-m7
 REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE := chronicle-gate/outbox-relay:candidate-r7-m7
 REFERENCE_LIFECYCLE_WORKFLOW_IMAGE := chronicle-gate/lifecycle-workflow:baseline-m7
+BENCHMARK_BASELINE_IMAGE := chronicle-gate/benchmark-api:baseline-m9
+BENCHMARK_CANDIDATE_IMAGE := chronicle-gate/benchmark-api:candidate-slow-m9
 GO_CACHE_MOUNTS := -v chronicle-gate-go-mod-cache:/go/pkg/mod -v chronicle-gate-go-build-cache:/root/.cache/go-build
 
 HOST_GOOS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -42,7 +44,7 @@ GO_ENV := env GOTOOLCHAIN=auto
 GOFMT_CMD := gofmt
 endif
 
-.PHONY: all build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint reference-images security-check test test-integration test-e2e test-race vet verify verify-common toolchain tidy
+.PHONY: all benchmark-images build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint reference-images security-check test test-benchmark test-integration test-e2e test-race vet verify verify-common toolchain tidy
 
 all: build
 
@@ -94,12 +96,22 @@ reference-images:
 	docker build --pull=false --label dev.chronicle.reference=lifecycle-workflow -t $(REFERENCE_LIFECYCLE_WORKFLOW_IMAGE) -f examples/order-lifecycle/services/lifecycle-workflow/Dockerfile .
 	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))" --flaky-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_FLAKY_IMAGE))" --r4-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_BASELINE_IMAGE))" --r4-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_CANDIDATE_IMAGE))" --r4-metadata-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_METADATA_IMAGE))" --workflow-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_BASELINE_IMAGE))" --workflow-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE))" --effect-sink-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_EFFECT_SINK_IMAGE))" --state-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_BASELINE_IMAGE))" --state-r3-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R3_IMAGE))" --state-r5-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R5_IMAGE))" --state-r6-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R6_IMAGE))" --order-api-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_ORDER_API_IMAGE))" --outbox-relay-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_OUTBOX_RELAY_BASELINE_IMAGE))" --outbox-relay-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE))" --lifecycle-workflow-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_LIFECYCLE_WORKFLOW_IMAGE))"
 
+benchmark-images:
+	docker build --pull=false --build-arg BENCHMARK_DELAY=1ms --label dev.chronicle.reference=benchmark-baseline -t $(BENCHMARK_BASELINE_IMAGE) -f examples/order-lifecycle/services/benchmark-api/Dockerfile .
+	docker build --pull=false --build-arg BENCHMARK_DELAY=20ms --label dev.chronicle.reference=benchmark-candidate-slow -t $(BENCHMARK_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/benchmark-api/Dockerfile .
+	$(GO_CMD) run ./tools/generate_benchmark_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(BENCHMARK_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(BENCHMARK_CANDIDATE_IMAGE))"
+
 test-integration: reference-images build
 	@mkdir -p dist run
 	$(GO_ENV) CGO_ENABLED=0 GOOS=$(HOST_GOOS) GOARCH=$(HOST_GOARCH) go test -c -tags=integration -o dist/chronicle-integration.test ./tests/integration
 	./dist/chronicle-integration.test -test.v
 
 test-e2e: test-integration
+
+test-benchmark: benchmark-images build
+	@mkdir -p dist run
+	$(GO_ENV) CGO_ENABLED=0 GOOS=$(HOST_GOOS) GOARCH=$(HOST_GOARCH) go test -c -tags=integration -o dist/chronicle-benchmark.test ./tests/benchmark
+	./dist/chronicle-benchmark.test -test.v
 
 fuzz-smoke: toolchain
 	$(GO_CMD) test ./internal/spec -run '^$$' -fuzz '^FuzzScenarioContracts$$' -fuzztime=1s
