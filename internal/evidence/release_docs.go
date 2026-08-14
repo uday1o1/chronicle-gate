@@ -39,6 +39,13 @@ var requiredPublicDocuments = []string{
 	"demo/r1-transcript.md",
 }
 
+const (
+	benchmarkResultsStart = "<!-- benchmark-results:start -->"
+	benchmarkResultsEnd   = "<!-- benchmark-results:end -->"
+	benchmarkResumeStart  = "<!-- benchmark-resume:start -->"
+	benchmarkResumeEnd    = "<!-- benchmark-resume:end -->"
+)
+
 func checkPublicDocumentation(repository string) error {
 	for _, path := range requiredPublicDocuments {
 		if err := checkPublicMarkdown(repository, path); err != nil {
@@ -51,7 +58,141 @@ func checkPublicDocumentation(repository string) error {
 	if err := checkMeasuredEvidenceReferences(repository); err != nil {
 		return err
 	}
+	if err := checkBenchmarkDocumentation(repository); err != nil {
+		return err
+	}
 	return checkDemo(repository)
+}
+
+func checkBenchmarkDocumentation(repository string) error {
+	evidencePath := filepath.Join(repository, "evidence", "results", "benchmark.json")
+	public, err := loadStrict[PublicBenchmarkEvidence](evidencePath)
+	if err != nil {
+		return err
+	}
+	if err := validatePublicBenchmark(public); err != nil {
+		return err
+	}
+	resultsBlock, err := renderBenchmarkResultsBlock(public)
+	if err != nil {
+		return err
+	}
+	resumeBlock, err := renderBenchmarkResumeBlock(public)
+	if err != nil {
+		return err
+	}
+	for _, check := range []struct {
+		path, start, end, expected string
+	}{
+		{"docs/results.md", benchmarkResultsStart, benchmarkResultsEnd, resultsBlock},
+		{"docs/resume.md", benchmarkResumeStart, benchmarkResumeEnd, resumeBlock},
+	} {
+		document, err := os.ReadFile(filepath.Join(repository, filepath.FromSlash(check.path)))
+		if err != nil {
+			return err
+		}
+		if err := requireExactMarkedBlock(string(document), check.start, check.end, check.expected); err != nil {
+			return fmt.Errorf("public document %s: %w", check.path, err)
+		}
+	}
+	return nil
+}
+
+func renderBenchmarkResultsBlock(public PublicBenchmarkEvidence) (string, error) {
+	if err := validatePublicBenchmark(public); err != nil {
+		return "", err
+	}
+	var output strings.Builder
+	output.WriteString(benchmarkResultsStart + "\n")
+	output.WriteString("| Comparison | Rounds | Requests per target | Pooled descriptive baseline p95 | Pooled descriptive candidate p95 | Mean paired absolute p95 delta | Mean paired relative p95 delta and confidence interval | Result |\n")
+	output.WriteString("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n")
+	for _, comparison := range public.Comparisons {
+		outcome := comparison.Outcome
+		analysis := outcome.Analysis
+		label := "A/A"
+		if comparison.CaseID == "benchmark-slowdown" {
+			label = "Seeded slowdown"
+		}
+		_, _ = fmt.Fprintf(&output,
+			"| %s | %d | %d | %s ns | %s ns | %s ns | %s%% (%s%% CI: %s%% to %s%%) | `%s` |\n",
+			label,
+			outcome.Rounds,
+			outcome.BaselineRequests,
+			formatGroupedInteger(outcome.PooledBaselineP95Nanos),
+			formatGroupedInteger(outcome.PooledCandidateP95Nanos),
+			formatGroupedFloat(analysis.MeanAbsoluteP95DeltaNanos, 2),
+			formatRatioPercent(analysis.MeanRelativeP95Delta),
+			formatRatioPercent(analysis.Confidence),
+			formatRatioPercent(analysis.LowerRelativeCI),
+			formatRatioPercent(analysis.UpperRelativeCI),
+			outcome.Classification,
+		)
+	}
+	output.WriteString(benchmarkResultsEnd)
+	return output.String(), nil
+}
+
+func renderBenchmarkResumeBlock(public PublicBenchmarkEvidence) (string, error) {
+	if err := validatePublicBenchmark(public); err != nil {
+		return "", err
+	}
+	slowdown := public.Comparisons[1].Outcome.Analysis
+	return fmt.Sprintf(
+		"%s\n- Built an isolated paired open-loop benchmark gate whose A/A control passed and whose seeded slowdown produced a mean paired relative p95 increase of %s%% with a %s%% paired-bootstrap confidence interval from %s%% to %s%%, plus a separately measured mean paired absolute p95 increase of %s ns.\n%s",
+		benchmarkResumeStart,
+		formatRatioPercent(slowdown.MeanRelativeP95Delta),
+		formatRatioPercent(slowdown.Confidence),
+		formatRatioPercent(slowdown.LowerRelativeCI),
+		formatRatioPercent(slowdown.UpperRelativeCI),
+		formatGroupedFloat(slowdown.MeanAbsoluteP95DeltaNanos, 2),
+		benchmarkResumeEnd,
+	), nil
+}
+
+func requireExactMarkedBlock(document, start, end, expected string) error {
+	if strings.Count(document, start) != 1 || strings.Count(document, end) != 1 {
+		return fmt.Errorf("benchmark evidence block markers are missing or duplicated")
+	}
+	startIndex := strings.Index(document, start)
+	endIndex := strings.Index(document, end)
+	if endIndex < startIndex {
+		return fmt.Errorf("benchmark evidence block markers are out of order")
+	}
+	actual := document[startIndex : endIndex+len(end)]
+	if actual != expected {
+		return fmt.Errorf("benchmark evidence block differs from canonical public evidence")
+	}
+	return nil
+}
+
+func formatRatioPercent(value float64) string {
+	return strconv.FormatFloat(value*100, 'f', 6, 64)
+}
+
+func formatGroupedFloat(value float64, precision int) string {
+	formatted := strconv.FormatFloat(value, 'f', precision, 64)
+	parts := strings.SplitN(formatted, ".", 2)
+	grouped := formatGroupedDecimal(parts[0])
+	if len(parts) == 2 {
+		return grouped + "." + parts[1]
+	}
+	return grouped
+}
+
+func formatGroupedInteger(value int64) string {
+	return formatGroupedDecimal(strconv.FormatInt(value, 10))
+}
+
+func formatGroupedDecimal(value string) string {
+	sign := ""
+	if strings.HasPrefix(value, "-") {
+		sign = "-"
+		value = strings.TrimPrefix(value, "-")
+	}
+	for index := len(value) - 3; index > 0; index -= 3 {
+		value = value[:index] + "," + value[index:]
+	}
+	return sign + value
 }
 
 func checkPublicMarkdown(repository, relative string) error {

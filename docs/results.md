@@ -64,33 +64,40 @@ The performance evidence contains one A/A control and one seeded-slowdown compar
 The A/A comparison completed with `PASS` and no regression decision.
 The seeded slowdown completed with `PERFORMANCE_REGRESSION` after crossing both the absolute p95 delta threshold and the lower relative confidence-bound threshold.
 <!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/classification -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/regression -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/analysis/regression -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/classification -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/regression -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/regression -->
 
-| Comparison | Rounds | Requests per target | Baseline p95 | Candidate p95 | Mean paired p95 delta | Relative confidence interval | Result |
+<!-- benchmark-results:start -->
+| Comparison | Rounds | Requests per target | Pooled descriptive baseline p95 | Pooled descriptive candidate p95 | Mean paired absolute p95 delta | Mean paired relative p95 delta and confidence interval | Result |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| A/A | 4 | 160 | 2,847,375 ns | 2,874,875 ns | -720,500.25 ns | -0.373703 to 0.050282 | `PASS` |
-| Seeded slowdown | 4 | 160 | 6,286,625 ns | 29,865,292 ns | 25,425,229 ns | 3.682243 to 9.914886 | `PERFORMANCE_REGRESSION` |
+| A/A | 4 | 160 | 4,618,917 ns | 5,883,083 ns | -378,791.25 ns | 6.381722% (95.000000% CI: -43.325657% to 77.027249%) | `PASS` |
+| Seeded slowdown | 4 | 160 | 6,117,583 ns | 29,719,416 ns | 24,500,531.50 ns | 530.868493% (95.000000% CI: 362.984472% to 830.714541%) | `PERFORMANCE_REGRESSION` |
+<!-- benchmark-results:end -->
 
 <!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/rounds -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/baselineRequests -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/candidateRequests -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/baselineP95Nanos -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/candidateP95Nanos -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/meanAbsoluteP95DeltaNanos -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/lowerRelativeCI -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/upperRelativeCI -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/pooledBaselineP95Nanos -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/pooledCandidateP95Nanos -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/analysis/meanAbsoluteP95DeltaNanos -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/analysis/meanRelativeP95Delta -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/analysis/confidence -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/analysis/lowerRelativeCI -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/analysis/upperRelativeCI -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/rounds -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/baselineRequests -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/candidateRequests -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/baselineP95Nanos -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/candidateP95Nanos -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/meanAbsoluteP95DeltaNanos -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/lowerRelativeCI -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/upperRelativeCI -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/pooledBaselineP95Nanos -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/pooledCandidateP95Nanos -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/meanAbsoluteP95DeltaNanos -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/meanRelativeP95Delta -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/confidence -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/lowerRelativeCI -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/upperRelativeCI -->
 
-The public benchmark JSON retains the paired round count, request inventories, baseline and candidate p95 aggregates, mean absolute p95 delta, and lower and upper relative confidence bounds shown above.
+The public benchmark JSON retains the paired round inputs needed to recompute the relative point estimate, configured interval, and regression decision exactly.
+The pooled target p95 values are descriptive quantiles over all requests and are not paired point estimates.
 These are development-scoped comparative measurements from the locked local environment, not production capacity claims.
 See [Benchmarking](benchmarking.md) for the exact estimator and validity rules.
 

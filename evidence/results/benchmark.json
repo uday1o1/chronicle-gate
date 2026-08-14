@@ -1,16 +1,16 @@
 {
-  "schemaVersion": "chronicle.dev/public-benchmark-evidence/v1alpha1",
+  "schemaVersion": "chronicle.dev/public-benchmark-evidence/v1alpha2",
   "kind": "PublicBenchmarkEvidence",
   "boundary": "Synthetic local comparative evidence demonstrates only the declared ChronicleGate scenarios and does not establish production reliability or capacity.",
   "comparisons": [
     {
       "caseId": "benchmark-aa",
-      "capturedAt": "2026-08-14T10:12:24Z",
+      "capturedAt": "2026-08-14T14:50:28Z",
       "source": {
-        "commit": "d9aa472311bf82f8e4f7690f7fc955ac4280a729",
-        "tree": "e9732d7f3412c54d4cb9af2c61f47f9e0537c5f6",
-        "binarySha256": "be3bee18cd10006ebefd55460943ecd66d70597c409aae0168ae581660708b29",
-        "binaryCommit": "d9aa472",
+        "commit": "895f2b29a840910e93c139fd9ff5392367ce68d7",
+        "tree": "4497a2bdbe4c86b577707e2739f7a6481aedfb11",
+        "binarySha256": "4aff41a61a99b45dfcbab0750d9cba0e0dfc3e81ea31b1047a2459845a139e34",
+        "binaryCommit": "895f2b2",
         "argv": [
           "bin/chronicle",
           "bench",
@@ -21,7 +21,7 @@
           "--candidate",
           "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
           "--out",
-          "run/release-evidence/benchmark-aa/raw",
+          "run/benchmark-reconcile-aa-895f2b2/raw",
           "--development-local-images",
           "--json"
         ],
@@ -40,7 +40,7 @@
           },
           {
             "path": "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
-            "sha256": "0a933c477d6e578ee353d49b595cc12c71cfc21349744b14557f1cd2510dbf37"
+            "sha256": "a0faedb4fec6443ff8c7fc7e2cbdca7b67c3c5e73feefb2f348ce5819024bac9"
           }
         ]
       },
@@ -51,28 +51,64 @@
         "rounds": 4,
         "baselineRequests": 160,
         "candidateRequests": 160,
-        "baselineP95Nanos": 2847375,
-        "candidateP95Nanos": 2874875,
-        "meanAbsoluteP95DeltaNanos": -720500.25,
-        "lowerRelativeCI": -0.37370314123532333,
-        "upperRelativeCI": 0.0502822380842019,
-        "regression": false
+        "pooledBaselineP95Nanos": 4618917,
+        "pooledCandidateP95Nanos": 5883083,
+        "pairedP95": [
+          {
+            "round": 0,
+            "baselineP95Nanos": 6891250,
+            "candidateP95Nanos": 3151084
+          },
+          {
+            "round": 1,
+            "baselineP95Nanos": 3328083,
+            "candidateP95Nanos": 2979292
+          },
+          {
+            "round": 2,
+            "baselineP95Nanos": 3153333,
+            "candidateP95Nanos": 6587750
+          },
+          {
+            "round": 3,
+            "baselineP95Nanos": 4618917,
+            "candidateP95Nanos": 3758292
+          }
+        ],
+        "analysis": {
+          "algorithm": "paired-percentile-bootstrap-v1",
+          "bootstrapSeed": 27182818,
+          "bootstrapResamples": 5000,
+          "confidence": 0.95,
+          "blockSize": 1,
+          "absoluteP95DeltaUnit": "nanoseconds",
+          "relativeP95DeltaUnit": "ratio",
+          "meanAbsoluteP95DeltaNanos": -378791.25,
+          "meanRelativeP95Delta": 0.06381721918997824,
+          "lowerRelativeCI": -0.43325657033705955,
+          "upperRelativeCI": 0.7702724876591642,
+          "lowerIndex": 125,
+          "upperIndex": 4874,
+          "absoluteThresholdNanos": 10000000,
+          "relativeThreshold": 0.5,
+          "regression": false
+        }
       },
       "artifacts": {
-        "resultSha256": "7f15c4da482d1aae1a9007439b170c341f371334dbe30efcf04e110f0529fdc8",
-        "checksumsSha256": "411628e56b61a0927153697a2f92a822551935b5d52a9a74e4d15835af2acd41",
+        "resultSha256": "c5556707e579856f9995fbe06f19b85a71ea0d356aafd310844880540567c851",
+        "checksumsSha256": "41934934cd4a390d8c2895288f03acd05ca39c80f11756ecc55b92816b109fdb",
         "journalSha256": null,
         "bundleSha256": null
       }
     },
     {
       "caseId": "benchmark-slowdown",
-      "capturedAt": "2026-08-14T10:13:35Z",
+      "capturedAt": "2026-08-14T14:50:59Z",
       "source": {
-        "commit": "d9aa472311bf82f8e4f7690f7fc955ac4280a729",
-        "tree": "e9732d7f3412c54d4cb9af2c61f47f9e0537c5f6",
-        "binarySha256": "be3bee18cd10006ebefd55460943ecd66d70597c409aae0168ae581660708b29",
-        "binaryCommit": "d9aa472",
+        "commit": "895f2b29a840910e93c139fd9ff5392367ce68d7",
+        "tree": "4497a2bdbe4c86b577707e2739f7a6481aedfb11",
+        "binarySha256": "4aff41a61a99b45dfcbab0750d9cba0e0dfc3e81ea31b1047a2459845a139e34",
+        "binaryCommit": "895f2b2",
         "argv": [
           "bin/chronicle",
           "bench",
@@ -83,7 +119,7 @@
           "--candidate",
           "examples/order-lifecycle/targets/generated/benchmark-candidate.yaml",
           "--out",
-          "run/release-evidence/benchmark-slowdown/raw",
+          "run/benchmark-reconcile-slow-895f2b2/raw",
           "--development-local-images",
           "--json"
         ],
@@ -102,11 +138,11 @@
           },
           {
             "path": "examples/order-lifecycle/targets/generated/benchmark-baseline.yaml",
-            "sha256": "0a933c477d6e578ee353d49b595cc12c71cfc21349744b14557f1cd2510dbf37"
+            "sha256": "a0faedb4fec6443ff8c7fc7e2cbdca7b67c3c5e73feefb2f348ce5819024bac9"
           },
           {
             "path": "examples/order-lifecycle/targets/generated/benchmark-candidate.yaml",
-            "sha256": "473b3e4b840e2dd77fe3b076545bf64aa02113a854f349c67602f44a60d1a56e"
+            "sha256": "d3e683b8f97e3ef1750de2e2bbc399729a4106f2cda560726880dfb5ca0ca049"
           }
         ]
       },
@@ -117,16 +153,52 @@
         "rounds": 4,
         "baselineRequests": 160,
         "candidateRequests": 160,
-        "baselineP95Nanos": 6286625,
-        "candidateP95Nanos": 29865292,
-        "meanAbsoluteP95DeltaNanos": 25425229,
-        "lowerRelativeCI": 3.6822426230776233,
-        "upperRelativeCI": 9.91488610409796,
-        "regression": true
+        "pooledBaselineP95Nanos": 6117583,
+        "pooledCandidateP95Nanos": 29719416,
+        "pairedP95": [
+          {
+            "round": 0,
+            "baselineP95Nanos": 6590292,
+            "candidateP95Nanos": 29666958
+          },
+          {
+            "round": 1,
+            "baselineP95Nanos": 2761000,
+            "candidateP95Nanos": 29694542
+          },
+          {
+            "round": 2,
+            "baselineP95Nanos": 6117583,
+            "candidateP95Nanos": 30365209
+          },
+          {
+            "round": 3,
+            "baselineP95Nanos": 5914583,
+            "candidateP95Nanos": 29658875
+          }
+        ],
+        "analysis": {
+          "algorithm": "paired-percentile-bootstrap-v1",
+          "bootstrapSeed": 27182818,
+          "bootstrapResamples": 5000,
+          "confidence": 0.95,
+          "blockSize": 1,
+          "absoluteP95DeltaUnit": "nanoseconds",
+          "relativeP95DeltaUnit": "ratio",
+          "meanAbsoluteP95DeltaNanos": 24500531.5,
+          "meanRelativeP95Delta": 5.308684929225289,
+          "lowerRelativeCI": 3.6298447194509667,
+          "upperRelativeCI": 8.307145407026,
+          "lowerIndex": 125,
+          "upperIndex": 4874,
+          "absoluteThresholdNanos": 10000000,
+          "relativeThreshold": 0.5,
+          "regression": true
+        }
       },
       "artifacts": {
-        "resultSha256": "1fc2a8a46ab316d49924891fd77caf12c2f18abfcf5812e7f9c36c2902694034",
-        "checksumsSha256": "eb34ae873e014bd74674bc795b57fc17b58df3d6a8520c2dc079166386168cb0",
+        "resultSha256": "919651140337305295575943275e446bafab36d206bad5f45e99d7550a4f0875",
+        "checksumsSha256": "7a5f0ca5dd2bf846187f4279d46b338e023f2d04c38b1a12b8a81e7e31f8c5a1",
         "journalSha256": null,
         "bundleSha256": null
       }

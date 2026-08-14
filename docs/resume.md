@@ -26,10 +26,15 @@ The bullets below are bounded to the checked-in synthetic workload, locked local
 <!-- measured: evidence/results/r1-offset-rewind.json#/reduction/trials -->
 <!-- measured: evidence/results/r1-offset-rewind.json#/reduction/minimality -->
 
-- Built an isolated paired open-loop benchmark gate whose A/A control passed and whose seeded slowdown produced a 25,425,229 ns mean paired p95 increase with a 3.682243 lower relative confidence bound.
+<!-- benchmark-resume:start -->
+- Built an isolated paired open-loop benchmark gate whose A/A control passed and whose seeded slowdown produced a mean paired relative p95 increase of 530.868493% with a 95.000000% paired-bootstrap confidence interval from 362.984472% to 830.714541%, plus a separately measured mean paired absolute p95 increase of 24,500,531.50 ns.
+<!-- benchmark-resume:end -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/classification -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/regression -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/analysis/regression -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/classification -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/regression -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/meanAbsoluteP95DeltaNanos -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/lowerRelativeCI -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/regression -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/meanAbsoluteP95DeltaNanos -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/meanRelativeP95Delta -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/confidence -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/lowerRelativeCI -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/upperRelativeCI -->

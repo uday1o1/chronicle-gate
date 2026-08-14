@@ -7,7 +7,7 @@ const (
 	CorpusSchemaVersion          = "chronicle.dev/evidence-corpus/v1alpha1"
 	CaptureSchemaVersion         = "chronicle.dev/evidence-capture/v1alpha1"
 	PublicCaseSchemaVersion      = "chronicle.dev/public-case-evidence/v1alpha1"
-	PublicBenchmarkSchemaVersion = "chronicle.dev/public-benchmark-evidence/v1alpha1"
+	PublicBenchmarkSchemaVersion = "chronicle.dev/public-benchmark-evidence/v1alpha2"
 )
 
 type Corpus struct {
@@ -149,16 +149,39 @@ type PublicBenchmarkEntry struct {
 }
 
 type BenchmarkOutcome struct {
-	ExitCode                  int     `json:"exitCode"`
-	State                     string  `json:"state"`
-	Classification            string  `json:"classification"`
-	Rounds                    int     `json:"rounds"`
-	BaselineRequests          int     `json:"baselineRequests"`
-	CandidateRequests         int     `json:"candidateRequests"`
-	BaselineP95Nanos          int64   `json:"baselineP95Nanos"`
-	CandidateP95Nanos         int64   `json:"candidateP95Nanos"`
+	ExitCode                int                     `json:"exitCode"`
+	State                   string                  `json:"state"`
+	Classification          string                  `json:"classification"`
+	Rounds                  int                     `json:"rounds"`
+	BaselineRequests        int                     `json:"baselineRequests"`
+	CandidateRequests       int                     `json:"candidateRequests"`
+	PooledBaselineP95Nanos  int64                   `json:"pooledBaselineP95Nanos"`
+	PooledCandidateP95Nanos int64                   `json:"pooledCandidateP95Nanos"`
+	PairedP95               []BenchmarkP95Pair      `json:"pairedP95"`
+	Analysis                PublicBenchmarkAnalysis `json:"analysis"`
+}
+
+type BenchmarkP95Pair struct {
+	Round             int   `json:"round"`
+	BaselineP95Nanos  int64 `json:"baselineP95Nanos"`
+	CandidateP95Nanos int64 `json:"candidateP95Nanos"`
+}
+
+type PublicBenchmarkAnalysis struct {
+	Algorithm                 string  `json:"algorithm"`
+	BootstrapSeed             int64   `json:"bootstrapSeed"`
+	BootstrapResamples        int     `json:"bootstrapResamples"`
+	Confidence                float64 `json:"confidence"`
+	BlockSize                 int     `json:"blockSize"`
+	AbsoluteP95DeltaUnit      string  `json:"absoluteP95DeltaUnit"`
+	RelativeP95DeltaUnit      string  `json:"relativeP95DeltaUnit"`
 	MeanAbsoluteP95DeltaNanos float64 `json:"meanAbsoluteP95DeltaNanos"`
+	MeanRelativeP95Delta      float64 `json:"meanRelativeP95Delta"`
 	LowerRelativeCI           float64 `json:"lowerRelativeCI"`
 	UpperRelativeCI           float64 `json:"upperRelativeCI"`
+	LowerIndex                int     `json:"lowerIndex"`
+	UpperIndex                int     `json:"upperIndex"`
+	AbsoluteThresholdNanos    int64   `json:"absoluteThresholdNanos"`
+	RelativeThreshold         float64 `json:"relativeThreshold"`
 	Regression                bool    `json:"regression"`
 }

@@ -3,6 +3,7 @@ SHELL := /bin/sh
 GO_VERSION := 1.26.6
 GO_BOOTSTRAP_IMAGE := docker.io/library/golang@sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd
 GOLANGCI_LINT_IMAGE := docker.io/golangci/golangci-lint@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240
+GO_BUILD_CACHE_VOLUME := chronicle-gate-go-build-cache
 REFERENCE_BASELINE_IMAGE := chronicle-gate/fulfillment-projector:baseline-m2
 REFERENCE_CANDIDATE_IMAGE := chronicle-gate/fulfillment-projector:candidate-r1-m2
 REFERENCE_FLAKY_IMAGE := chronicle-gate/fulfillment-projector:flaky-r1-m3
@@ -23,7 +24,7 @@ REFERENCE_LIFECYCLE_WORKFLOW_IMAGE := chronicle-gate/lifecycle-workflow:baseline
 BENCHMARK_BASELINE_IMAGE := chronicle-gate/benchmark-api:baseline-m9
 BENCHMARK_CANDIDATE_IMAGE := chronicle-gate/benchmark-api:candidate-slow-m9
 REFERENCE_BUILD_CACHE_LABEL := dev.chronicle.build-cache=reference-v1
-GO_CACHE_MOUNTS := -v chronicle-gate-go-mod-cache:/go/pkg/mod -v chronicle-gate-go-build-cache:/root/.cache/go-build
+GO_CACHE_MOUNTS := -v chronicle-gate-go-mod-cache:/go/pkg/mod -v $(GO_BUILD_CACHE_VOLUME):/root/.cache/go-build
 
 HOST_GOOS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 HOST_GOARCH_RAW := $(shell uname -m)
@@ -45,7 +46,7 @@ GO_ENV := env GOTOOLCHAIN=auto
 GOFMT_CMD := gofmt
 endif
 
-.PHONY: all benchmark-images build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint prune-reference-build-cache reference-images release-check security-check test test-benchmark test-integration test-e2e test-race vet verify verify-common toolchain tidy
+.PHONY: all benchmark-images build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint prune-go-build-cache prune-reference-build-cache reference-images release-check security-check test test-benchmark test-integration test-e2e test-race vet verify verify-common toolchain tidy
 
 all: build
 
@@ -81,7 +82,11 @@ prune-reference-build-cache:
 	docker container prune --force --filter "label=$(REFERENCE_BUILD_CACHE_LABEL)"
 	docker image prune --force --filter "label=$(REFERENCE_BUILD_CACHE_LABEL)"
 
+prune-go-build-cache:
+	docker run --rm --label "$(REFERENCE_BUILD_CACHE_LABEL)" -e GOTOOLCHAIN=auto -v $(GO_BUILD_CACHE_VOLUME):/root/.cache/go-build $(GO_BOOTSTRAP_IMAGE) go clean -cache
+
 reference-images:
+	$(MAKE) prune-go-build-cache
 	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=baseline --label dev.chronicle.reference=baseline -t $(REFERENCE_BASELINE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r1 --label dev.chronicle.reference=candidate-r1 -t $(REFERENCE_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
@@ -110,6 +115,7 @@ reference-images:
 	$(MAKE) prune-reference-build-cache
 
 benchmark-images:
+	$(MAKE) prune-go-build-cache
 	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --build-arg BENCHMARK_DELAY=1ms --label dev.chronicle.reference=benchmark-baseline -t $(BENCHMARK_BASELINE_IMAGE) -f examples/order-lifecycle/services/benchmark-api/Dockerfile .
 	docker build --pull=false --build-arg BENCHMARK_DELAY=20ms --label dev.chronicle.reference=benchmark-candidate-slow -t $(BENCHMARK_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/benchmark-api/Dockerfile .

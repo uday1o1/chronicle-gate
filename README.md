@@ -135,7 +135,7 @@ R1 reduction removed one of two events and one of seven actions in eight fresh-p
 The isolated benchmark gate passed its A/A control and detected the seeded practical slowdown under the locked paired-bootstrap policy.
 <!-- measured: evidence/results/benchmark.json#/comparisons/0/outcome/classification -->
 <!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/classification -->
-<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/regression -->
+<!-- measured: evidence/results/benchmark.json#/comparisons/1/outcome/analysis/regression -->
 
 See [Results and evidence](docs/results.md) for exact signatures, observation counts, reduction facts, raw benchmark aggregates, source provenance, and claim boundaries.
 

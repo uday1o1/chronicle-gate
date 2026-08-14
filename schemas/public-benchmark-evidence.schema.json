@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "kind", "boundary", "comparisons"],
   "properties": {
-    "schemaVersion": {"const": "chronicle.dev/public-benchmark-evidence/v1alpha1"},
+    "schemaVersion": {"const": "chronicle.dev/public-benchmark-evidence/v1alpha2"},
     "kind": {"const": "PublicBenchmarkEvidence"},
     "boundary": {"type": "string", "minLength": 1, "maxLength": 512},
     "comparisons": {
@@ -31,7 +31,7 @@
         "outcome": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["exitCode", "state", "classification", "rounds", "baselineRequests", "candidateRequests", "baselineP95Nanos", "candidateP95Nanos", "meanAbsoluteP95DeltaNanos", "lowerRelativeCI", "upperRelativeCI", "regression"],
+          "required": ["exitCode", "state", "classification", "rounds", "baselineRequests", "candidateRequests", "pooledBaselineP95Nanos", "pooledCandidateP95Nanos", "pairedP95", "analysis"],
           "properties": {
             "exitCode": {"enum": [0, 2]},
             "state": {"const": "COMPLETE"},
@@ -39,15 +39,51 @@
             "rounds": {"type": "integer", "minimum": 4, "maximum": 20},
             "baselineRequests": {"type": "integer", "minimum": 1, "maximum": 1000000},
             "candidateRequests": {"type": "integer", "minimum": 1, "maximum": 1000000},
-            "baselineP95Nanos": {"type": "integer", "minimum": 1},
-            "candidateP95Nanos": {"type": "integer", "minimum": 1},
-            "meanAbsoluteP95DeltaNanos": {"type": "number"},
-            "lowerRelativeCI": {"type": "number"},
-            "upperRelativeCI": {"type": "number"},
-            "regression": {"type": "boolean"}
+            "pooledBaselineP95Nanos": {"type": "integer", "minimum": 1},
+            "pooledCandidateP95Nanos": {"type": "integer", "minimum": 1},
+            "pairedP95": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 20,
+              "items": {"$ref": "#/$defs/p95Pair"}
+            },
+            "analysis": {"$ref": "#/$defs/analysis"}
           }
         },
         "artifacts": {"$ref": "evidence-capture.schema.json#/$defs/artifacts"}
+      }
+    },
+    "p95Pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["round", "baselineP95Nanos", "candidateP95Nanos"],
+      "properties": {
+        "round": {"type": "integer", "minimum": 0, "maximum": 19},
+        "baselineP95Nanos": {"type": "integer", "minimum": 1},
+        "candidateP95Nanos": {"type": "integer", "minimum": 1}
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "bootstrapSeed", "bootstrapResamples", "confidence", "blockSize", "absoluteP95DeltaUnit", "relativeP95DeltaUnit", "meanAbsoluteP95DeltaNanos", "meanRelativeP95Delta", "lowerRelativeCI", "upperRelativeCI", "lowerIndex", "upperIndex", "absoluteThresholdNanos", "relativeThreshold", "regression"],
+      "properties": {
+        "algorithm": {"const": "paired-percentile-bootstrap-v1"},
+        "bootstrapSeed": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+        "bootstrapResamples": {"type": "integer", "minimum": 1000, "maximum": 100000},
+        "confidence": {"type": "number", "minimum": 0.8, "maximum": 0.999},
+        "blockSize": {"const": 1},
+        "absoluteP95DeltaUnit": {"const": "nanoseconds"},
+        "relativeP95DeltaUnit": {"const": "ratio"},
+        "meanAbsoluteP95DeltaNanos": {"type": "number"},
+        "meanRelativeP95Delta": {"type": "number"},
+        "lowerRelativeCI": {"type": "number"},
+        "upperRelativeCI": {"type": "number"},
+        "lowerIndex": {"type": "integer", "minimum": 0, "maximum": 99999},
+        "upperIndex": {"type": "integer", "minimum": 0, "maximum": 99999},
+        "absoluteThresholdNanos": {"type": "integer", "minimum": 0},
+        "relativeThreshold": {"type": "number", "minimum": 0},
+        "regression": {"type": "boolean"}
       }
     }
   }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/uday1o1/chronicle-gate/internal/bench"
 	"github.com/uday1o1/chronicle-gate/internal/runlog"
 )
 
@@ -124,8 +125,8 @@ func TestCaptureAndPublicSchemasCompileAndValidate(t *testing.T) {
 	benchmark := PublicBenchmarkEvidence{
 		SchemaVersion: PublicBenchmarkSchemaVersion, Kind: "PublicBenchmarkEvidence", Boundary: evidenceBoundary,
 		Comparisons: []PublicBenchmarkEntry{
-			{CaseID: "benchmark-aa", CapturedAt: semantic.CapturedAt, Source: benchmarkSource, Artifacts: benchmarkArtifacts, Outcome: BenchmarkOutcome{ExitCode: 0, State: "COMPLETE", Classification: "PASS", Rounds: 4, BaselineRequests: 1, CandidateRequests: 1, BaselineP95Nanos: 1, CandidateP95Nanos: 1}},
-			{CaseID: "benchmark-slowdown", CapturedAt: semantic.CapturedAt, Source: benchmarkSource, Artifacts: benchmarkArtifacts, Outcome: BenchmarkOutcome{ExitCode: 2, State: "COMPLETE", Classification: "PERFORMANCE_REGRESSION", Rounds: 4, BaselineRequests: 1, CandidateRequests: 1, BaselineP95Nanos: 1, CandidateP95Nanos: 2, Regression: true}},
+			{CaseID: "benchmark-aa", CapturedAt: semantic.CapturedAt, Source: benchmarkSource, Artifacts: benchmarkArtifacts, Outcome: validBenchmarkOutcome(t, false)},
+			{CaseID: "benchmark-slowdown", CapturedAt: semantic.CapturedAt, Source: benchmarkSource, Artifacts: benchmarkArtifacts, Outcome: validBenchmarkOutcome(t, true)},
 		},
 	}
 	document, err = json.Marshal(benchmark)
@@ -134,6 +135,59 @@ func TestCaptureAndPublicSchemasCompileAndValidate(t *testing.T) {
 	}
 	if err := validateSchemaDocument(repository, "public-benchmark-evidence.schema.json", document); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPublicBenchmarkAnalysisMustRecomputeExactly(t *testing.T) {
+	public := PublicBenchmarkEvidence{
+		SchemaVersion: PublicBenchmarkSchemaVersion,
+		Kind:          "PublicBenchmarkEvidence",
+		Comparisons: []PublicBenchmarkEntry{
+			{CaseID: "benchmark-aa", Outcome: validBenchmarkOutcome(t, false)},
+			{CaseID: "benchmark-slowdown", Outcome: validBenchmarkOutcome(t, true)},
+		},
+	}
+	if err := validatePublicBenchmark(public); err != nil {
+		t.Fatal(err)
+	}
+	public.Comparisons[1].Outcome.Analysis.MeanRelativeP95Delta++
+	if err := validatePublicBenchmark(public); err == nil {
+		t.Fatal("tampered public relative point estimate passed recomputation")
+	}
+	public.Comparisons[1].Outcome = validBenchmarkOutcome(t, true)
+	public.Comparisons[1].Outcome.PairedP95[1].Round = 0
+	if err := validatePublicBenchmark(public); err == nil {
+		t.Fatal("duplicate public round passed recomputation")
+	}
+	public.Comparisons[1].Outcome = validBenchmarkOutcome(t, true)
+	public.Comparisons[1].Outcome.Analysis.RelativeP95DeltaUnit = "percent"
+	if err := validatePublicBenchmark(public); err == nil {
+		t.Fatal("incorrect public relative unit passed recomputation")
+	}
+}
+
+func TestBenchmarkMarkdownBlocksRejectStaleNumbers(t *testing.T) {
+	public := PublicBenchmarkEvidence{
+		SchemaVersion: PublicBenchmarkSchemaVersion,
+		Kind:          "PublicBenchmarkEvidence",
+		Comparisons: []PublicBenchmarkEntry{
+			{CaseID: "benchmark-aa", Outcome: validBenchmarkOutcome(t, false)},
+			{CaseID: "benchmark-slowdown", Outcome: validBenchmarkOutcome(t, true)},
+		},
+	}
+	block, err := renderBenchmarkResultsBlock(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := requireExactMarkedBlock(block, benchmarkResultsStart, benchmarkResultsEnd, block); err != nil {
+		t.Fatal(err)
+	}
+	stale := strings.Replace(block, "200.000000%", "201.000000%", 1)
+	if stale == block {
+		t.Fatal("benchmark block fixture did not contain the relative estimate")
+	}
+	if err := requireExactMarkedBlock(stale, benchmarkResultsStart, benchmarkResultsEnd, block); err == nil {
+		t.Fatal("stale benchmark Markdown number passed release validation")
 	}
 }
 
@@ -401,4 +455,38 @@ func repositoryRoot(t *testing.T) string {
 
 func stringPointer(value string) *string {
 	return &value
+}
+
+func validBenchmarkOutcome(t *testing.T, regression bool) BenchmarkOutcome {
+	t.Helper()
+	pairs := []bench.P95Pair{
+		{Round: 0, BaselineP95Nanos: 10, CandidateP95Nanos: 10},
+		{Round: 1, BaselineP95Nanos: 10, CandidateP95Nanos: 10},
+		{Round: 2, BaselineP95Nanos: 10, CandidateP95Nanos: 10},
+		{Round: 3, BaselineP95Nanos: 10, CandidateP95Nanos: 10},
+	}
+	exitCode := 0
+	classification := "PASS"
+	if regression {
+		exitCode = 2
+		classification = "PERFORMANCE_REGRESSION"
+		for index := range pairs {
+			pairs[index].CandidateP95Nanos = 30
+		}
+	}
+	configuration := bench.Analysis{
+		Algorithm: "paired-percentile-bootstrap-v1", BootstrapSeed: 9, BootstrapResamples: 1000,
+		Confidence: 0.95, BlockSize: 1, AbsoluteP95DeltaUnit: bench.AbsoluteP95DeltaUnit,
+		RelativeP95DeltaUnit: bench.RelativeP95DeltaUnit, AbsoluteThresholdNanos: 20, RelativeThreshold: 0.5,
+	}
+	analysis, err := bench.RecomputeAnalysis(pairs, configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return BenchmarkOutcome{
+		ExitCode: exitCode, State: "COMPLETE", Classification: classification, Rounds: len(pairs),
+		BaselineRequests: 40, CandidateRequests: 40, PooledBaselineP95Nanos: 10,
+		PooledCandidateP95Nanos: pairs[0].CandidateP95Nanos, PairedP95: publicP95Pairs(pairs),
+		Analysis: publicBenchmarkAnalysis(analysis),
+	}
 }

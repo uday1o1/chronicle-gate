@@ -135,15 +135,20 @@ func PublishBenchmark(repository, corpusPath, aaCaptureRoot, slowdownCaptureRoot
 		if baseline.Target != "baseline" || candidate.Target != "candidate" {
 			return PublicBenchmarkEvidence{}, fmt.Errorf("benchmark aggregate order is invalid")
 		}
+		pairs, err := bench.PairP95Trials(report.Trials, report.Plan.Rounds)
+		if err != nil {
+			return PublicBenchmarkEvidence{}, err
+		}
+		if err := bench.ValidateAnalysis(pairs, report.Analysis); err != nil {
+			return PublicBenchmarkEvidence{}, err
+		}
 		entries = append(entries, PublicBenchmarkEntry{
 			CaseID: item.ID, CapturedAt: capture.CapturedAt, Source: capture.Source, Artifacts: capture.Artifacts,
 			Outcome: BenchmarkOutcome{
 				ExitCode: capture.Execution.ExitCode, State: report.State, Classification: report.Classification,
 				Rounds: report.Plan.Rounds, BaselineRequests: baseline.Requests, CandidateRequests: candidate.Requests,
-				BaselineP95Nanos: baseline.P95Nanos, CandidateP95Nanos: candidate.P95Nanos,
-				MeanAbsoluteP95DeltaNanos: report.Analysis.MeanAbsoluteP95DeltaNanos,
-				LowerRelativeCI:           report.Analysis.LowerRelativeCI, UpperRelativeCI: report.Analysis.UpperRelativeCI,
-				Regression: report.Analysis.Regression,
+				PooledBaselineP95Nanos: baseline.P95Nanos, PooledCandidateP95Nanos: candidate.P95Nanos,
+				PairedP95: publicP95Pairs(pairs), Analysis: publicBenchmarkAnalysis(report.Analysis),
 			},
 		})
 	}
@@ -388,11 +393,62 @@ func validatePublicBenchmark(public PublicBenchmarkEvidence) error {
 	if public.SchemaVersion != PublicBenchmarkSchemaVersion || public.Kind != "PublicBenchmarkEvidence" || len(public.Comparisons) != 2 {
 		return fmt.Errorf("public benchmark evidence must contain exactly two comparisons")
 	}
-	if public.Comparisons[0].CaseID != "benchmark-aa" || public.Comparisons[0].Outcome.Classification != "PASS" || public.Comparisons[0].Outcome.ExitCode != 0 || public.Comparisons[0].Outcome.Regression {
+	if public.Comparisons[0].CaseID != "benchmark-aa" || public.Comparisons[0].Outcome.Classification != "PASS" || public.Comparisons[0].Outcome.ExitCode != 0 || public.Comparisons[0].Outcome.Analysis.Regression {
 		return fmt.Errorf("public benchmark A/A evidence is invalid")
 	}
-	if public.Comparisons[1].CaseID != "benchmark-slowdown" || public.Comparisons[1].Outcome.Classification != "PERFORMANCE_REGRESSION" || public.Comparisons[1].Outcome.ExitCode != 2 || !public.Comparisons[1].Outcome.Regression {
+	if public.Comparisons[1].CaseID != "benchmark-slowdown" || public.Comparisons[1].Outcome.Classification != "PERFORMANCE_REGRESSION" || public.Comparisons[1].Outcome.ExitCode != 2 || !public.Comparisons[1].Outcome.Analysis.Regression {
 		return fmt.Errorf("public benchmark slowdown evidence is invalid")
+	}
+	for _, comparison := range public.Comparisons {
+		if err := validatePublicBenchmarkOutcome(comparison.Outcome); err != nil {
+			return fmt.Errorf("public benchmark %s: %w", comparison.CaseID, err)
+		}
+	}
+	return nil
+}
+
+func publicP95Pairs(pairs []bench.P95Pair) []BenchmarkP95Pair {
+	public := make([]BenchmarkP95Pair, len(pairs))
+	for index, pair := range pairs {
+		public[index] = BenchmarkP95Pair{Round: pair.Round, BaselineP95Nanos: pair.BaselineP95Nanos, CandidateP95Nanos: pair.CandidateP95Nanos}
+	}
+	return public
+}
+
+func publicBenchmarkAnalysis(analysis bench.Analysis) PublicBenchmarkAnalysis {
+	return PublicBenchmarkAnalysis{
+		Algorithm: analysis.Algorithm, BootstrapSeed: analysis.BootstrapSeed,
+		BootstrapResamples: analysis.BootstrapResamples, Confidence: analysis.Confidence, BlockSize: analysis.BlockSize,
+		AbsoluteP95DeltaUnit: analysis.AbsoluteP95DeltaUnit, RelativeP95DeltaUnit: analysis.RelativeP95DeltaUnit,
+		MeanAbsoluteP95DeltaNanos: analysis.MeanAbsoluteP95DeltaNanos, MeanRelativeP95Delta: analysis.MeanRelativeP95Delta,
+		LowerRelativeCI: analysis.LowerRelativeCI, UpperRelativeCI: analysis.UpperRelativeCI,
+		LowerIndex: analysis.LowerIndex, UpperIndex: analysis.UpperIndex,
+		AbsoluteThresholdNanos: analysis.AbsoluteThresholdNanos, RelativeThreshold: analysis.RelativeThreshold,
+		Regression: analysis.Regression,
+	}
+}
+
+func validatePublicBenchmarkOutcome(outcome BenchmarkOutcome) error {
+	if outcome.State != "COMPLETE" || outcome.Rounds <= 0 || outcome.BaselineRequests <= 0 || outcome.CandidateRequests <= 0 || outcome.PooledBaselineP95Nanos <= 0 || outcome.PooledCandidateP95Nanos <= 0 || len(outcome.PairedP95) != outcome.Rounds {
+		return fmt.Errorf("outcome inventory is invalid")
+	}
+	pairs := make([]bench.P95Pair, len(outcome.PairedP95))
+	for index, pair := range outcome.PairedP95 {
+		pairs[index] = bench.P95Pair{Round: pair.Round, BaselineP95Nanos: pair.BaselineP95Nanos, CandidateP95Nanos: pair.CandidateP95Nanos}
+	}
+	configuration := bench.Analysis{
+		Algorithm: outcome.Analysis.Algorithm, BootstrapSeed: outcome.Analysis.BootstrapSeed,
+		BootstrapResamples: outcome.Analysis.BootstrapResamples, Confidence: outcome.Analysis.Confidence,
+		BlockSize: outcome.Analysis.BlockSize, AbsoluteP95DeltaUnit: outcome.Analysis.AbsoluteP95DeltaUnit,
+		RelativeP95DeltaUnit:   outcome.Analysis.RelativeP95DeltaUnit,
+		AbsoluteThresholdNanos: outcome.Analysis.AbsoluteThresholdNanos, RelativeThreshold: outcome.Analysis.RelativeThreshold,
+	}
+	recomputed, err := bench.RecomputeAnalysis(pairs, configuration)
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(publicBenchmarkAnalysis(recomputed), outcome.Analysis) {
+		return fmt.Errorf("published analysis does not match deterministic recomputation")
 	}
 	return nil
 }
