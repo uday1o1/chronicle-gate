@@ -45,7 +45,7 @@ GO_ENV := env GOTOOLCHAIN=auto
 GOFMT_CMD := gofmt
 endif
 
-.PHONY: all benchmark-images build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint reference-images release-check security-check test test-benchmark test-integration test-e2e test-race vet verify verify-common toolchain tidy
+.PHONY: all benchmark-images build build-cross clean fmt fmt-check fuzz-smoke govulncheck lint prune-reference-build-cache reference-images release-check security-check test test-benchmark test-integration test-e2e test-race vet verify verify-common toolchain tidy
 
 all: build
 
@@ -77,32 +77,44 @@ test: toolchain
 vet: toolchain
 	$(GO_CMD) vet ./...
 
+prune-reference-build-cache:
+	docker container prune --force --filter "label=$(REFERENCE_BUILD_CACHE_LABEL)"
+	docker image prune --force --filter "label=$(REFERENCE_BUILD_CACHE_LABEL)"
+
 reference-images:
+	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=baseline --label dev.chronicle.reference=baseline -t $(REFERENCE_BASELINE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r1 --label dev.chronicle.reference=candidate-r1 -t $(REFERENCE_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=flaky-r1 --label dev.chronicle.reference=flaky-r1 -t $(REFERENCE_FLAKY_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=baseline-r4 --label dev.chronicle.reference=baseline-r4 -t $(REFERENCE_R4_BASELINE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r4 --label dev.chronicle.reference=candidate-r4 -t $(REFERENCE_R4_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
 	docker build --pull=false --build-arg PROJECTOR_VARIANT=candidate-r4-metadata --label dev.chronicle.reference=candidate-r4-metadata -t $(REFERENCE_R4_METADATA_IMAGE) -f examples/order-lifecycle/services/fulfillment-projector/Dockerfile .
+	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=baseline --label dev.chronicle.reference=workflow-baseline -t $(REFERENCE_WORKFLOW_BASELINE_IMAGE) -f examples/order-lifecycle/services/order-workflow/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r2 --label dev.chronicle.reference=workflow-candidate-r2 -t $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/order-workflow/Dockerfile .
+	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --label dev.chronicle.reference=effect-sink -t $(REFERENCE_EFFECT_SINK_IMAGE) -f examples/order-lifecycle/services/effect-sink/Dockerfile .
+	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=baseline --label dev.chronicle.reference=state-baseline -t $(REFERENCE_STATE_BASELINE_IMAGE) -f examples/order-lifecycle/services/state-workflow/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r3 --label dev.chronicle.reference=state-candidate-r3 -t $(REFERENCE_STATE_R3_IMAGE) -f examples/order-lifecycle/services/state-workflow/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r5 --label dev.chronicle.reference=state-candidate-r5 -t $(REFERENCE_STATE_R5_IMAGE) -f examples/order-lifecycle/services/state-workflow/Dockerfile .
 	docker build --pull=false --build-arg WORKFLOW_VARIANT=candidate-r6 --label dev.chronicle.reference=state-candidate-r6 -t $(REFERENCE_STATE_R6_IMAGE) -f examples/order-lifecycle/services/state-workflow/Dockerfile .
+	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --label dev.chronicle.reference=order-api -t $(REFERENCE_ORDER_API_IMAGE) -f examples/order-lifecycle/services/order-api/Dockerfile .
+	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --build-arg RELAY_VARIANT=baseline --label dev.chronicle.reference=outbox-relay-baseline -t $(REFERENCE_OUTBOX_RELAY_BASELINE_IMAGE) -f examples/order-lifecycle/services/outbox-relay/Dockerfile .
 	docker build --pull=false --build-arg RELAY_VARIANT=candidate-r7 --label dev.chronicle.reference=outbox-relay-candidate-r7 -t $(REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/outbox-relay/Dockerfile .
+	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --label dev.chronicle.reference=lifecycle-workflow -t $(REFERENCE_LIFECYCLE_WORKFLOW_IMAGE) -f examples/order-lifecycle/services/lifecycle-workflow/Dockerfile .
 	$(GO_CMD) run ./tools/generate_reference_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_CANDIDATE_IMAGE))" --flaky-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_FLAKY_IMAGE))" --r4-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_BASELINE_IMAGE))" --r4-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_CANDIDATE_IMAGE))" --r4-metadata-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_R4_METADATA_IMAGE))" --workflow-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_BASELINE_IMAGE))" --workflow-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_WORKFLOW_CANDIDATE_IMAGE))" --effect-sink-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_EFFECT_SINK_IMAGE))" --state-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_BASELINE_IMAGE))" --state-r3-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R3_IMAGE))" --state-r5-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R5_IMAGE))" --state-r6-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_STATE_R6_IMAGE))" --order-api-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_ORDER_API_IMAGE))" --outbox-relay-baseline-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_OUTBOX_RELAY_BASELINE_IMAGE))" --outbox-relay-candidate-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_OUTBOX_RELAY_CANDIDATE_IMAGE))" --lifecycle-workflow-image "$$(docker image inspect --format '{{.Id}}' $(REFERENCE_LIFECYCLE_WORKFLOW_IMAGE))"
-	docker image prune --force --filter "label=$(REFERENCE_BUILD_CACHE_LABEL)"
+	$(MAKE) prune-reference-build-cache
 
 benchmark-images:
+	$(MAKE) prune-reference-build-cache
 	docker build --pull=false --build-arg BENCHMARK_DELAY=1ms --label dev.chronicle.reference=benchmark-baseline -t $(BENCHMARK_BASELINE_IMAGE) -f examples/order-lifecycle/services/benchmark-api/Dockerfile .
 	docker build --pull=false --build-arg BENCHMARK_DELAY=20ms --label dev.chronicle.reference=benchmark-candidate-slow -t $(BENCHMARK_CANDIDATE_IMAGE) -f examples/order-lifecycle/services/benchmark-api/Dockerfile .
 	$(GO_CMD) run ./tools/generate_benchmark_targets --baseline-image "$$(docker image inspect --format '{{.Id}}' $(BENCHMARK_BASELINE_IMAGE))" --candidate-image "$$(docker image inspect --format '{{.Id}}' $(BENCHMARK_CANDIDATE_IMAGE))"
-	docker image prune --force --filter "label=$(REFERENCE_BUILD_CACHE_LABEL)"
+	$(MAKE) prune-reference-build-cache
 
 test-integration: reference-images build
 	@mkdir -p dist run
