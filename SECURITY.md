@@ -32,11 +32,10 @@ See [`docs/security-model.md`](docs/security-model.md) for the complete threat m
 The Milestone 0 `doctor` command performs read-only Docker inspection and remote manifest resolution.
 It does not start workload containers.
 
-## Dependency and workflow policy
+## Dependency policy
 
-Every GitHub Action reference is pinned to a full immutable commit SHA.
-Pull requests run the pinned GitHub dependency-review action separately from the pinned `govulncheck` reachable-code scan.
-`make security-check` validates the Go dependency lock in both directions, workflow pins and triggers, image pins and capability policies, and credential-shaped repository content.
+`make security-check` validates the Go dependency lock in both directions, image pins and capability policies, and credential-shaped repository content.
+`make govulncheck` separately scans reachable Go dependency code with the pinned scanner version.
 
 ## Data handling
 

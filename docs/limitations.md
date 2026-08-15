@@ -37,7 +37,7 @@ It does not establish general correctness, production capacity, or hostile-workl
 ## Performance boundary
 
 - `chronicle bench` compares two targets on one controlled host and reports a paired local effect under one predeclared workload.
-- Local macOS, Colima, and shared CI results are functional development evidence, not production capacity measurements.
+- Local macOS, Colima, and other non-dedicated results are functional development evidence, not production capacity measurements.
 - Publication-scoped measurement requires a dedicated native Linux host, local Unix-socket Docker daemon, idle-host checks, no competing containers, and immutable named OCI targets.
 - The locked bootstrap confidence interval describes the sampled paired trials and does not guarantee future latency.
 - Tail latency outside the authored request rate, duration, response bounds, and endpoint is not measured.

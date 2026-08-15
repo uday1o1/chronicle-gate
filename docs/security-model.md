@@ -89,10 +89,9 @@ An interrupted journal never contains a `COMPLETE` terminal record.
 The repository checker rejects missing direct modules, stale locked modules, duplicate entries, wrong versions, and direct-versus-indirect kind mismatches.
 `go mod tidy` must leave both module files unchanged.
 
-The normal CI workflow runs the common format, unit, property, `go vet`, race, repository security, `govulncheck`, bounded fuzz, and build gate on Ubuntu and macOS.
+The local verification gate runs format, unit, property, `go vet`, race, repository security, `govulncheck`, bounded fuzz, build, cross-build, and trusted Docker integration checks.
 The pinned Docker golangci-lint image provides the broader lint and staticcheck gate.
-Trusted Docker integration runs on a GitHub-hosted Ubuntu runner and never on a privileged self-hosted pull-request runner.
-The pinned dependency-review action runs only for pull requests.
+Dependency locks are checked against `go.mod` in both directions, and `govulncheck` scans reachable dependency code.
 
 ## Verification gates
 

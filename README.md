@@ -146,7 +146,7 @@ See [Results and evidence](docs/results.md) for exact signatures, observation co
 - Development-local image IDs and their embedded replay bundles are nonportable across Docker platforms.
 - A `PASS` means the declared observations matched under one locked scenario, not that both services are universally equivalent.
 - `UNRESOLVED`, `TIMEOUT`, `FLAKY`, `INFRASTRUCTURE_ERROR`, and `INTERRUPTED` are non-passing outcomes.
-- Local macOS, Colima, and shared-CI benchmark runs are comparative development evidence, not production capacity claims.
+- Local macOS, Colima, and other non-dedicated benchmark runs are comparative development evidence, not production capacity claims.
 
 ## Build and internals
 

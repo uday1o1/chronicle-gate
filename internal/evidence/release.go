@@ -37,9 +37,6 @@ func CheckReleaseRepository(repository string) error {
 	if err := checkTrackedArtifacts(repository); err != nil {
 		return err
 	}
-	if err := checkWorkflowHistory(repository); err != nil {
-		return err
-	}
 	if err := checkE2EAlias(repository); err != nil {
 		return err
 	}
@@ -88,43 +85,6 @@ func checkTrackedArtifacts(repository string) error {
 		for _, name := range []string{"capture.json", ".env", "credentials", "secret", "token"} {
 			if strings.Contains(lower, name) {
 				return fmt.Errorf("private evidence or credential-like file is tracked: %s", path)
-			}
-		}
-	}
-	return nil
-}
-
-func checkWorkflowHistory(repository string) error {
-	paths, err := filepath.Glob(filepath.Join(repository, ".github", "workflows", "*.y*ml"))
-	if err != nil {
-		return err
-	}
-	for _, path := range paths {
-		document, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		text := string(document)
-		checkoutCount := strings.Count(text, "uses: actions/checkout@")
-		if checkoutCount == 0 || strings.Count(text, "fetch-depth: 0") != checkoutCount {
-			return fmt.Errorf("workflow %s does not retain full source history for every checkout", filepath.Base(path))
-		}
-		for _, line := range strings.Split(text, "\n") {
-			line = strings.TrimSpace(line)
-			if !strings.HasPrefix(line, "uses:") {
-				continue
-			}
-			fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(line, "uses:")))
-			if len(fields) == 0 {
-				return fmt.Errorf("workflow %s has an empty action reference", filepath.Base(path))
-			}
-			reference := fields[0]
-			if strings.HasPrefix(reference, "./") {
-				continue
-			}
-			at := strings.LastIndexByte(reference, '@')
-			if at < 0 || len(reference[at+1:]) != 40 || !isLowerHex(reference[at+1:]) {
-				return fmt.Errorf("workflow %s action is not pinned to a full commit SHA: %s", filepath.Base(path), reference)
 			}
 		}
 	}
@@ -206,17 +166,6 @@ func checkPublicCaseFile(repository, path string, item SemanticCase) error {
 		return fmt.Errorf("public case evidence %s does not match its checked-in signature", item.ID)
 	}
 	return checkHistoricalSource(repository, value.Source)
-}
-
-func isLowerHex(value string) bool {
-	for _, character := range value {
-		if character < '0' || character > '9' {
-			if character < 'a' || character > 'f' {
-				return false
-			}
-		}
-	}
-	return value != ""
 }
 
 func checkPublicBenchmarkFile(repository, path string) error {

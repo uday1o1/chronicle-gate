@@ -14,8 +14,6 @@ import (
 )
 
 var (
-	actionPattern  = regexp.MustCompile(`(?m)^\s*-?\s*uses:\s*([^\s#]+)@([^\s#]+)`)
-	shaPattern     = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	secretPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
 		regexp.MustCompile(`ghp_[A-Za-z0-9]{36}`),
@@ -51,7 +49,7 @@ func main() {
 }
 
 func checkRepository(root string) error {
-	checks := []func(string) error{checkDependencyLock, checkWorkflows, checkSecrets, checkImageLock}
+	checks := []func(string) error{checkDependencyLock, checkSecrets, checkImageLock}
 	var failures []error
 	for _, check := range checks {
 		if err := check(root); err != nil {
@@ -162,49 +160,6 @@ func parseGoMod(path string) (map[string]moduleDependency, string, error) {
 		return nil, "", fmt.Errorf("go.mod omits the Go version")
 	}
 	return modules, goVersion, nil
-}
-
-func checkWorkflows(root string) error {
-	workflowRoot := filepath.Join(root, ".github", "workflows")
-	dependencyReview := false
-	err := filepath.Walk(workflowRoot, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if info.IsDir() || filepath.Ext(path) != ".yml" && filepath.Ext(path) != ".yaml" {
-			return nil
-		}
-		document, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		text := string(document)
-		if strings.Contains(text, "pull_request_target:") {
-			return fmt.Errorf("workflow %s uses dangerous pull_request_target", path)
-		}
-		if strings.Contains(text, "self-hosted") && strings.Contains(text, "pull_request:") {
-			return fmt.Errorf("pull-request workflow %s uses a self-hosted runner", path)
-		}
-		for _, match := range actionPattern.FindAllStringSubmatch(text, -1) {
-			if strings.HasPrefix(match[1], "./") {
-				continue
-			}
-			if !shaPattern.MatchString(match[2]) {
-				return fmt.Errorf("workflow action %s@%s is not pinned by a full commit SHA", match[1], match[2])
-			}
-			if match[1] == "actions/dependency-review-action" {
-				dependencyReview = true
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if !dependencyReview {
-		return fmt.Errorf("pull-request dependency review action is absent")
-	}
-	return nil
 }
 
 func checkSecrets(root string) error {

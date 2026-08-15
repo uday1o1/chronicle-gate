@@ -94,9 +94,9 @@ A benchmark output directory contains these private mode `0600` files.
 
 Apple silicon with Colima is supported for local comparative development.
 Local results do not establish production capacity and must not be presented as generally reproducible performance numbers.
-GitHub-hosted runners may execute the functional benchmark gate but cannot produce portfolio performance claims.
+Shared or hosted runners may execute the functional benchmark gate but cannot produce portfolio performance claims.
 
-Publication evidence requires the `publication` workload scope, an explicit `--dedicated-host` attestation, a native non-containerized Linux CLI host, a local Unix-socket Docker daemon, no shared CI environment, no other running Docker containers, and the required resource evidence.
+Publication evidence requires the `publication` workload scope, an explicit `--dedicated-host` attestation, a native non-containerized Linux CLI host, a local Unix-socket Docker daemon, no shared execution environment, no other running Docker containers, and the required resource evidence.
 Named immutable OCI references are resolved by inspecting the authored digest, selecting exactly one matching runtime descriptor while ignoring non-runtime attestations, pulling that child digest, and verifying that Docker retains the selected platform digest and matching OS and architecture for the executed config image.
 Bare local config-image IDs are accepted only with `--development-local-images` and are always rejected for publication evidence.
 Publication preflight records a 30-second `/proc/stat` and `/proc/loadavg` idle sample and requires at least 90 percent idle CPU with normalized one-minute load no greater than 0.25.
